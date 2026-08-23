@@ -934,13 +934,23 @@ Waktu Server: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
                 return await ctx.reply(`❌ Gagal membaca data dari tab "${tabName}".`);
             }
 
+            let productionStartIndex = -1;
+            let wasteStartIndex = -1;
+            rows.forEach((row, index) => {
+                const value = String(row[0] || '').trim().toUpperCase();
+                if (value === 'PRODUCTION') productionStartIndex = index;
+                if (value === 'WASTE') wasteStartIndex = index;
+            });
+            const start = productionStartIndex !== -1 ? productionStartIndex + 1 : 0;
+            const end = wasteStartIndex !== -1 ? wasteStartIndex : rows.length;
+
             const productionProducts = [];
-            for (let i = 0; i < rows.length; i++) {
+            for (let i = start; i < end; i++) {
                 const row = rows[i];
                 const prodName = String(row[0] || '').trim();
                 const existingQty = String(row[2] || '').trim();
 
-                if (prodName && !prodName.startsWith('---') && !prodName.includes('NAMA PRODUK') && !prodName.includes('KODE')) {
+                if (prodName && !prodName.startsWith('---') && !prodName.includes('NAMA PRODUK') && !prodName.includes('KODE') && prodName.toUpperCase() !== 'PRODUCTION' && prodName.toUpperCase() !== 'WASTE') {
                     productionProducts.push({
                         name: prodName,
                         rowIndex: i + 1,
@@ -1156,24 +1166,39 @@ Aturan Penting Alias Shorthand:
                     range: `'${tabName}'!B1:B120`
                 });
                 const rows = readRes.data.values || [];
-                rows.forEach(row => {
-                    const name = String(row[0] || '').trim();
-                    if (name && !name.startsWith('---') && !name.includes('NAMA PRODUK') && !name.includes('KODE')) {
+                let productionStartIndex = -1;
+                let wasteStartIndex = -1;
+                rows.forEach((row, index) => {
+                    const value = String(row[0] || '').trim().toUpperCase();
+                    if (value === 'PRODUCTION') productionStartIndex = index;
+                    if (value === 'WASTE') wasteStartIndex = index;
+                });
+                const start = productionStartIndex !== -1 ? productionStartIndex + 1 : 0;
+                const end = wasteStartIndex !== -1 ? wasteStartIndex : rows.length;
+                for (let i = start; i < end; i++) {
+                    const name = String(rows[i][0] || '').trim();
+                    if (name && !name.startsWith('---') && !name.includes('NAMA PRODUK') && !name.includes('KODE') && name.toUpperCase() !== 'PRODUCTION' && name.toUpperCase() !== 'WASTE') {
                         validProductNamesList.push(name);
                     }
-                });
+                }
             } else if (commandType === 'waste') {
                 const readRes = await sheets.spreadsheets.values.get({
                     spreadsheetId: branch.spreadsheets.waste,
                     range: `'${tabName}'!B1:B150`
                 });
                 const rows = readRes.data.values || [];
-                rows.forEach(row => {
-                    const name = String(row[0] || '').trim();
-                    if (name && !name.startsWith('---') && !name.includes('NAMA PRODUK') && !name.includes('KODE')) {
+                let wasteStartIndex = -1;
+                rows.forEach((row, index) => {
+                    const value = String(row[0] || '').trim().toUpperCase();
+                    if (value === 'WASTE') wasteStartIndex = index;
+                });
+                const start = wasteStartIndex !== -1 ? wasteStartIndex + 1 : 0;
+                for (let i = start; i < rows.length; i++) {
+                    const name = String(rows[i][0] || '').trim();
+                    if (name && !name.startsWith('---') && !name.includes('NAMA PRODUK') && !name.includes('KODE') && name.toUpperCase() !== 'PRODUCTION' && name.toUpperCase() !== 'WASTE') {
                         validProductNamesList.push(name);
                     }
-                });
+                }
             } else if (commandType === 'dailyso') {
                 const readRes = await sheets.spreadsheets.values.get({
                     spreadsheetId: branch.spreadsheets.dailyso,
@@ -1389,11 +1414,18 @@ Periksa kembali rincian data di atas sebelum disimpan.`;
                 return await ctx.reply(`❌ Gagal membaca data dari tab "${tabName}".`);
             }
 
+            let wasteStartIndex = -1;
+            rows.forEach((row, index) => {
+                const value = String(row[0] || '').trim().toUpperCase();
+                if (value === 'WASTE') wasteStartIndex = index;
+            });
+            const start = wasteStartIndex !== -1 ? wasteStartIndex + 1 : 0;
+
             const wasteProducts = [];
-            for (let i = 0; i < rows.length; i++) {
+            for (let i = start; i < rows.length; i++) {
                 const row = rows[i];
                 const prodName = String(row[0] || '').trim();
-                if (prodName && !prodName.startsWith('---') && !prodName.includes('NAMA PRODUK') && !prodName.includes('KODE')) {
+                if (prodName && !prodName.startsWith('---') && !prodName.includes('NAMA PRODUK') && !prodName.includes('KODE') && prodName.toUpperCase() !== 'PRODUCTION' && prodName.toUpperCase() !== 'WASTE') {
                     wasteProducts.push({
                         name: prodName,
                         rowIndex: i + 1
