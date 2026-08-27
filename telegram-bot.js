@@ -1,4 +1,18 @@
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
+
+// If GCP_SERVICE_ACCOUNT_JSON is provided as an env variable, write it to a temp file
+if (process.env.GCP_SERVICE_ACCOUNT_JSON) {
+    try {
+        const tempKeyPath = path.join('/tmp', 'gcp-key.json');
+        fs.writeFileSync(tempKeyPath, process.env.GCP_SERVICE_ACCOUNT_JSON);
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = tempKeyPath;
+        console.log('[GCP] Successfully wrote service account credentials from env variable to', tempKeyPath);
+    } catch (err) {
+        console.error('[GCP_ERR] Failed to write service account credentials from env:', err.message);
+    }
+}
 
 // --- IN-MEMORY LOG BUFFER FOR REALTIME TELEGRAM VIEW (SEPARATED BY BRANCH) ---
 const logBuffers = {
