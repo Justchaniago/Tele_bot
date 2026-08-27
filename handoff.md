@@ -401,3 +401,32 @@ Current authentication/security readiness: `BLOCKED`
 
 3. **Database Cleanup**:
    - Cleaned up corrupt/invalid `session_pms_v2` document & subcollection from Firestore so bot starts with a clean slate.
+
+---
+
+## 🤖 Telegram Bot (PMS & TP) Health Check & Auto-Restart Fix — August 6, 2026
+
+### Verdict: `PASS`
+
+### Issues Found:
+1. **Rogue Zombie Process**: A rogue `node telegram-bot.js` process (PID 45871) was running on the GCE VM since August 3, consuming ~94% CPU. This rogue instance was competing for Telegram's long-polling updates, causing the PM bot to get stuck and not receive updates (updates stayed pending in Telegram's queue).
+2. **Lack of Internal Monitoring**: The Telegram bot lacked a health monitoring and automatic restart mechanism if the polling loop stalled.
+
+### Key Updates:
+1. **Rogue Process Cleaned**: Terminated the zombie node process (PID 45871) and its parent timeout watcher process (PID 45862) on the VM.
+2. **Added `/health` API Endpoint**: Implemented `/health` on port 8080 (Express) returning live connection details, username, status (`UP`/`DOWN`), and count of pending updates for both TP and PM bots.
+3. **Background Health Checker**: Added `startBackgroundHealthChecker()` which runs every 30 seconds. If a bot is detected as stuck (pending updates exist but no messages processed for >45 seconds), it attempts to stop and restart the bot polling. If it fails or detects unauthorized token (401), it calls `process.exit(1)` to let PM2 automatically restart the entire daemon process.
+4. **Added API Call Timeouts (Gemini & Sheets) & Vertex AI Model Tuning**:
+   - Wrapped Gemini `ai.models.generateContent` calls in a robust promise-based timeout (`generateContentWithTimeout`) set to **30 seconds** to prevent premature timeouts during Vertex AI cold starts.
+   - Filtered the `CANDIDATE_MODELS` list to include only supported models for this GCP project/region on Vertex AI (`gemini-2.5-flash` and `gemini-2.5-pro`), removing invalid 404 models (`gemini-2.0-flash`, `gemini-1.5-flash`) so the loop doesn't waste time on failing requests.
+   - Configured the Google Sheets API client with a global `timeout: 10000` (10 seconds) default to prevent Google Sheets calls from hanging indefinitely in case of network fluctuations.
+5. **Optimized Spreadsheet Writes (`batchUpdate`)**:
+   - Replaced the slow, row-by-row sequential `sheets.spreadsheets.values.update` loop with a single `sheets.spreadsheets.values.batchUpdate` call in `writeProduksiItems`, waste writes, and dailyso writes. This reduces multiple network requests down to a single batch request, increasing stability and performance significantly.
+6. **Scheduler State Persistence**:
+   - Persisted the `telegramSentReminders` state (`soft` & `hard` alerts) to Firestore under `scheduler_state/reminders` document. This ensures that even if the server reboots or PM2 restarts the process around alert times (21:45 or 22:00 WIB), the bot will not send duplicate messages to group chats.
+7. **Self-Healing Google Sheets API Client**:
+   - Added `handleSheetsError(err)` helper to intercept all Sheets API errors. If an authentication, token, or permission error is caught, the cached client `globalSheetsClient` is reset to `null` so that subsequent requests automatically re-authenticate and fetch fresh credentials, preventing persistent auth-related failures.
+8. **Verified Success**: Restarted the PM2 daemon (`telegram-server`). Verified via curl that both TP and PM bots initialized successfully, pending updates dropped to 0, and `/health` returns `UP` with all bots marked healthy.
+
+
+

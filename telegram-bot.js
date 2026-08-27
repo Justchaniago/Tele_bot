@@ -85,7 +85,7 @@ const authForVertex = new google.auth.GoogleAuth({
 });
 
 const ai = apiKey 
-    ? new GoogleGenAI({ apiKey })
+    ? new GoogleGenAI({ apiKey, vertexai: false })
     : new GoogleGenAI({ vertexai: true, project, location, googleAuth: authForVertex });
 
 // Robust Gemini Call with Timeout
@@ -123,6 +123,8 @@ const db = new Firestore({
 
 // Candidate models for Gemini AI on Vertex AI Model Garden (Filtered for supported Vertex AI models)
 const CANDIDATE_MODELS = [
+    'gemini-3.5-flash-lite',
+    'gemini-3.6-flash',
     'gemini-2.5-flash',
     'gemini-2.5-pro'
 ];
@@ -1901,7 +1903,7 @@ ${branch.morningTemplate}
 
     // 9. /model
     bot.command('model', async (ctx) => {
-        const currentModel = userSelectedModel.get(ctx.from.id) || 'gemini-2.5-flash';
+        const currentModel = userSelectedModel.get(ctx.from.id) || 'gemini-3.5-flash-lite';
         const text = `Pilih Model Gemini AI\n----------------------------------------\nModel aktif saat ini: ${currentModel}\n\nPilih model yang ingin digunakan:`;
 
         await ctx.reply(text, {
