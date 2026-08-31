@@ -86,7 +86,7 @@ const { Firestore } = require('@google-cloud/firestore');
 const express = require('express');
 const pino = require('pino');
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 80;
 const project = 'project-a2bb3a13-c8e1-4097-92d';
 process.env.GOOGLE_CLOUD_PROJECT = project;
 process.env.GCP_PROJECT_ID = project;
@@ -496,15 +496,26 @@ function hasReportedQuantity(rows, startIndex, endIndex, quantityColumnIndex) {
     return false;
 }
 
+function isWasteHeader(val) {
+    const value = String(val || '').trim().toUpperCase();
+    return value === 'WASTE' || value === 'WASTE:' || value.startsWith('WASTE ') || value.startsWith('WASTE:');
+}
+
+function isProductionHeader(val) {
+    const value = String(val || '').trim().toUpperCase();
+    return value === 'PRODUCTION' || value === 'PRODUCTION:' || value.startsWith('PRODUCTION ') || value === 'PRODUKSI' || value === 'PRODUKSI:';
+}
+
 function getProductionWasteStatus(rows) {
     let productionStartIndex = -1;
     let wasteStartIndex = -1;
 
     rows.forEach((row, index) => {
-        const value = String(row[0] || '').trim().toUpperCase();
-        if (value === 'PRODUCTION') productionStartIndex = index;
-        if (value === 'WASTE') wasteStartIndex = index;
+        const value = String(row[0] || '').trim();
+        if (isProductionHeader(value)) productionStartIndex = index;
+        if (isWasteHeader(value)) wasteStartIndex = index;
     });
+
 
     const productionEndIndex = wasteStartIndex === -1 ? rows.length : wasteStartIndex;
     return {
@@ -580,8 +591,8 @@ function queueUserTask(userId, taskFn) {
 
 // Initialize each Telegram bot
 function setupBot(branch) {
-    if (!branch.token || branch.token.startsWith('MISSING') || branch.token === '8797074812:AAFKn_1KdBb0XwH0SzXDM_XcFh3JGnjnpUk' || branch.token === '8999763453:AAELmaxlgaENqwOcCqca_Rziu_oKVLGj334') {
-        console.warn(`[TELEGRAM] Skipping Bot ${branch.code} initialization: Token is missing, public, or invalid.`);
+    if (!branch.token || branch.token.startsWith('MISSING')) {
+        console.warn(`[TELEGRAM] Skipping Bot ${branch.code} initialization: Token is missing or invalid.`);
         return null;
     }
     const bot = new Telegraf(branch.token);
@@ -953,12 +964,15 @@ Waktu Server: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
             let productionStartIndex = -1;
             let wasteStartIndex = -1;
             rows.forEach((row, index) => {
-                const value = String(row[0] || '').trim().toUpperCase();
-                if (value === 'PRODUCTION') productionStartIndex = index;
-                if (value === 'WASTE') wasteStartIndex = index;
+                const value = String(row[0] || '').trim();
+                if (isProductionHeader(value)) productionStartIndex = index;
+                if (isWasteHeader(value)) wasteStartIndex = index;
             });
+            if (wasteStartIndex === -1) {
+                return await ctx.reply(`❌ Header "WASTE" tidak ditemukan di tab "${tabName}". Harap periksa apakah posisi baris "WASTE" sudah benar di spreadsheet.`);
+            }
             const start = productionStartIndex !== -1 ? productionStartIndex + 1 : 0;
-            const end = wasteStartIndex !== -1 ? wasteStartIndex : rows.length;
+            const end = wasteStartIndex;
 
             const productionProducts = [];
             for (let i = start; i < end; i++) {
@@ -1185,12 +1199,15 @@ Aturan Penting Alias Shorthand:
                 let productionStartIndex = -1;
                 let wasteStartIndex = -1;
                 rows.forEach((row, index) => {
-                    const value = String(row[0] || '').trim().toUpperCase();
-                    if (value === 'PRODUCTION') productionStartIndex = index;
-                    if (value === 'WASTE') wasteStartIndex = index;
+                    const value = String(row[0] || '').trim();
+                    if (isProductionHeader(value)) productionStartIndex = index;
+                    if (isWasteHeader(value)) wasteStartIndex = index;
                 });
+                if (wasteStartIndex === -1) {
+                    return await ctx.reply(`❌ Header "WASTE" tidak ditemukan di tab "${tabName}". Harap periksa apakah posisi baris "WASTE" sudah benar di spreadsheet.`);
+                }
                 const start = productionStartIndex !== -1 ? productionStartIndex + 1 : 0;
-                const end = wasteStartIndex !== -1 ? wasteStartIndex : rows.length;
+                const end = wasteStartIndex;
                 for (let i = start; i < end; i++) {
                     const name = String(rows[i][0] || '').trim();
                     if (name && !name.startsWith('---') && !name.includes('NAMA PRODUK') && !name.includes('KODE') && name.toUpperCase() !== 'PRODUCTION' && name.toUpperCase() !== 'WASTE') {
@@ -1205,10 +1222,13 @@ Aturan Penting Alias Shorthand:
                 const rows = readRes.data.values || [];
                 let wasteStartIndex = -1;
                 rows.forEach((row, index) => {
-                    const value = String(row[0] || '').trim().toUpperCase();
-                    if (value === 'WASTE') wasteStartIndex = index;
+                    const value = String(row[0] || '').trim();
+                    if (isWasteHeader(value)) wasteStartIndex = index;
                 });
-                const start = wasteStartIndex !== -1 ? wasteStartIndex + 1 : 0;
+                if (wasteStartIndex === -1) {
+                    return await ctx.reply(`❌ Header "WASTE" tidak ditemukan di tab "${tabName}". Harap periksa apakah posisi baris "WASTE" sudah benar di spreadsheet.`);
+                }
+                const start = wasteStartIndex + 1;
                 for (let i = start; i < rows.length; i++) {
                     const name = String(rows[i][0] || '').trim();
                     if (name && !name.startsWith('---') && !name.includes('NAMA PRODUK') && !name.includes('KODE') && name.toUpperCase() !== 'PRODUCTION' && name.toUpperCase() !== 'WASTE') {
@@ -1432,10 +1452,13 @@ Periksa kembali rincian data di atas sebelum disimpan.`;
 
             let wasteStartIndex = -1;
             rows.forEach((row, index) => {
-                const value = String(row[0] || '').trim().toUpperCase();
-                if (value === 'WASTE') wasteStartIndex = index;
+                const value = String(row[0] || '').trim();
+                if (isWasteHeader(value)) wasteStartIndex = index;
             });
-            const start = wasteStartIndex !== -1 ? wasteStartIndex + 1 : 0;
+            if (wasteStartIndex === -1) {
+                return await ctx.reply(`❌ Header "WASTE" tidak ditemukan di tab "${tabName}". Harap periksa apakah posisi baris "WASTE" sudah benar di spreadsheet.`);
+            }
+            const start = wasteStartIndex + 1;
 
             const wasteProducts = [];
             for (let i = start; i < rows.length; i++) {
@@ -2661,8 +2684,11 @@ function startBackgroundHealthChecker() {
             } catch (err) {
                 console.error(`[HEALTH_CHECKER] Error checking health for Bot ${branch.code}:`, err.message);
                 if (err.message.includes('401') || err.message.includes('Unauthorized')) {
-                    console.error('[HEALTH_CHECKER] Unauthorized token detected. Exiting process...');
-                    needsRestart = true;
+                    console.error(`[HEALTH_CHECKER] Unauthorized token detected for Bot ${branch.code}. Disabling bot to prevent crash loop.`);
+                    try {
+                        await branch.bot.stop();
+                    } catch (stopErr) {}
+                    branch.bot = null;
                 }
             }
         }

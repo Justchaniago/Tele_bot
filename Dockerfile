@@ -13,10 +13,12 @@ RUN npm install --omit=dev
 COPY . .
 
 # Build Web Control Panel Frontend
-RUN cd panel && npm install && npm run build
+RUN cd panel && npm install && npm run build && rm -rf node_modules
 
-# Cloud Run listens on PORT env (default 8080)
-EXPOSE 8080
+
+# Cloud Run listens on PORT env (default 80)
+EXPOSE 80
+
 
 # Start command
 CMD ["npm", "start"]

@@ -9,3 +9,5 @@ yarn-error.log*
 .DS_Store
 scratch/
 project-a2bb3a13-c8e1-4097-92d-adf8cc2d24c6.json
+container-config.json
+

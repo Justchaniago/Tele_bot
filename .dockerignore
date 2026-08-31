@@ -1,0 +1,8 @@
+node_modules
+panel/node_modules
+.git
+.env
+project-a2bb3a13-c8e1-4097-92d-adf8cc2d24c6.json
+deploy-aws.sh
+*.log
+*.png
