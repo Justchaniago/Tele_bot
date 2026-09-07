@@ -33,6 +33,39 @@ describe("commands and normalization", () => {
   it("preserves qualifiers while normalizing harmless formatting", () => {
     expect(normalizeText("  GONG CHA Y16 CUPS-G1 (MEDIUM)  ")).toBe("gong cha y16 cups g1 medium");
     expect(normalizeText("medium lokal")).toBe("medium lokal");
+    expect(normalizeText("Pearl:")).toBe("pearl");
+  });
+
+  it("accepts a colon between an SKU and its quantity", async () => {
+    const result = await parseCommandBlock({
+      domain: "PRODUCTION",
+      body: "07-09-2026\nPearl: 0.3"
+    }, { now });
+
+    expect(result.status).toBe("PARSE_READY");
+    expect(result.items[0]).toMatchObject({
+      canonicalSkuId: "PEARL_BASE",
+      quantityValue: 0.3,
+      status: "RESOLVED"
+    });
+  });
+
+  it("resolves the controlled Production smoke vocabulary with colon separators", async () => {
+    const result = await parseCommandBlock({
+      domain: "PRODUCTION",
+      body: "07.09.2026\nPearl: 0.3\nEgt: 25\nGt lokal: 25\nOt: 25\nMilk coffee: 120\nPistachio foam: 20"
+    }, { now });
+
+    expect(result.status).toBe("PARSE_READY");
+    expect(result.items.every(item => item.status === "RESOLVED")).toBe(true);
+    expect(result.items.map(item => item.canonicalSkuId)).toEqual([
+      "PEARL_BASE",
+      "EARL_GREY_TEA_BASE",
+      "GREEN_TEA_LOCAL_BASE",
+      "OOLONG_TEA_BASE",
+      "MILK_COFFEE_BASE",
+      "PISTACHIO_MILK_FOAM_BASE"
+    ]);
   });
 
   it("segments independent command blocks and retains empty context", async () => {

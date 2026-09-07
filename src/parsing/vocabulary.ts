@@ -21,7 +21,7 @@ const productionWaste: readonly [ProductionWasteSkuId, string, readonly string[]
   ["EARL_GREY_TEA_BASE", "EARL GREY TEA BASE", ["egt", "earl grey", "earl grey tea"]],
   ["WINTER_MELON_BASE", "WINTER MELON BASE", []],
   ["HONEY_BASE", "HONEY BASE", []],
-  ["MILK_COFFEE_BASE", "MILK COFFEE BASE", ["coffee"]],
+  ["MILK_COFFEE_BASE", "MILK COFFEE BASE", ["milk coffee", "coffee"]],
   ["BLACK_COFFEE_BASE", "BLACK COFFEE BASE", ["coffee"]],
   ["GREEN_TEA_LOCAL_BASE", "GREEN TEA LOKAL BASE", ["gt lokal", "gt local", "green tea local", "green tea lokal"]],
   ["BLACK_TEA_LOCAL_BASE", "BLACK TEA BASE LOKAL", ["bt lokal", "bt local", "black tea", "black tea local", "black tea lokal"]],
@@ -33,7 +33,7 @@ const productionWaste: readonly [ProductionWasteSkuId, string, readonly string[]
   ["PUDDING_BASE", "PUDDING BASE", ["pudding"]],
   ["PEARL_BASE", "PEARL BASE", ["pearl"]],
   ["MILK_FOAM_BASE", "MILK FOAM BASE", []],
-  ["PISTACHIO_MILK_FOAM_BASE", "PISTACHIO MILK FOAM BASE", []],
+  ["PISTACHIO_MILK_FOAM_BASE", "PISTACHIO MILK FOAM BASE", ["pistachio foam"]],
   ["BANANA_FOAM_BASE", "BANANA FOAM BASE", []],
   ["CHEESE_FOAM_BASE", "CHEESE FOAM BASE", []],
   ["CHEESE_CAKE_PUDDING", "CHEESE CAKE PUDDING", ["pudding"]],
@@ -83,7 +83,7 @@ export function normalizeText(value: string): string {
   return value
     .normalize("NFKC")
     .toLowerCase()
-    .replace(/[(){}_,\-]+/g, " ")
+    .replace(/[(){}_,:\-]+/g, " ")
     .replace(/[\/\\]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();

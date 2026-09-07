@@ -35,12 +35,12 @@ function pwInput(parsed: Awaited<ReturnType<typeof block>>, domain: "PRODUCTION"
 
 describe("Production and Waste business semantics", () => {
   it.each([["PRODUCTION", planProduction], ["WASTE", planWaste]] as const)("%s uses SET/CLEAR, correction, no accumulation", async (domain, planner) => {
-    const fresh = await block(domain, `${date}\npearl 5`);
+    const fresh = await block(domain, `${date}\npearl 3`);
     const ready = planner(pwInput(fresh, domain, { PEARL_BASE: null }));
     expect(ready.status).toBe("READY");
-    if (ready.status === "READY") expect(ready.plan.effects[0]).toMatchObject({ desiredValue: 5, operation: "SET" });
+    if (ready.status === "READY") expect(ready.plan.effects[0]).toMatchObject({ desiredValue: 3, operation: "SET" });
 
-    const same = planner(pwInput(fresh, domain, { PEARL_BASE: 5 }));
+    const same = planner(pwInput(fresh, domain, { PEARL_BASE: 3 }));
     expect(same.status).toBe("NO_OP");
     const correction = planner(pwInput(await block(domain, `${date}\npearl 3`), domain, { PEARL_BASE: 5 }));
     expect(correction.status).toBe("REQUIRES_CONFIRMATION");
@@ -55,7 +55,7 @@ describe("Production and Waste business semantics", () => {
   });
 
   it("omits P/W SKUs and never accumulates", async () => {
-    const parsed = await block("PRODUCTION", `${date}\npearl 4`);
+    const parsed = await block("PRODUCTION", `${date}\npearl 3`);
     const result = planProduction(pwInput(parsed, "PRODUCTION", { PEARL_BASE: null }));
     expect(result.status).toBe("READY");
     if (result.status === "READY") expect(result.plan.effects).toHaveLength(1);
@@ -63,8 +63,28 @@ describe("Production and Waste business semantics", () => {
     if (correction.status === "REQUIRES_CONFIRMATION") expect(correction.plan.effects[0].desiredValue).toBe(3);
   });
 
+  it("requires confirmation for Production Pearl above 3 kg, including a blank target", async () => {
+    const parsed = await block("PRODUCTION", `${date}\npearl 3.01`);
+    const result = planProduction(pwInput(parsed, "PRODUCTION", { PEARL_BASE: null }));
+
+    expect(result.status).toBe("REQUIRES_CONFIRMATION");
+    if (result.status === "REQUIRES_CONFIRMATION") {
+      expect(result.plan.effects[0]).toMatchObject({ desiredValue: 3.01, operation: "SET", expectedOldValue: null });
+      expect(result.plan.corrections[0]).toMatchObject({ oldValue: null, proposedValue: 3.01 });
+      expect(result.plan.executable).toBe(false);
+    }
+  });
+
+  it("does not apply the Pearl guard to Waste or values at 3 kg", async () => {
+    const productionAtThreshold = await block("PRODUCTION", `${date}\npearl 3`);
+    expect(planProduction(pwInput(productionAtThreshold, "PRODUCTION", { PEARL_BASE: null })).status).toBe("READY");
+
+    const wasteAboveThreshold = await block("WASTE", `${date}\npearl 3.01`);
+    expect(planWaste(pwInput(wasteAboveThreshold, "WASTE", { PEARL_BASE: null })).status).toBe("READY");
+  });
+
   it("holds whole mixed block when one line needs correction", async () => {
-    const parsed = await block("PRODUCTION", `${date}\npearl 5\nhoney base 3`);
+    const parsed = await block("PRODUCTION", `${date}\npearl 3\nhoney base 3`);
     const result = planProduction(pwInput(parsed, "PRODUCTION", { PEARL_BASE: null, HONEY_BASE: 2 }, ["PEARL_BASE", "HONEY_BASE"]));
     expect(result.status).toBe("REQUIRES_CONFIRMATION");
     if (result.status === "REQUIRES_CONFIRMATION") {
@@ -183,11 +203,11 @@ describe("M4 parser and date gates", () => {
 
   it("supports historical planning, blocks future and invalid dates", async () => {
     const values = { PEARL_BASE: null };
-    const historical = await block("PRODUCTION", "01-09-2026\npearl 4");
+    const historical = await block("PRODUCTION", "01-09-2026\npearl 3");
     expect(planProduction(pwInput(historical, "PRODUCTION", values)).status).toBe("READY");
-    const future = await block("PRODUCTION", "08-09-2026\npearl 4");
+    const future = await block("PRODUCTION", "08-09-2026\npearl 3");
     expect(planProduction(pwInput(future, "PRODUCTION", values)).status).toBe("REQUIRES_CLARIFICATION");
-    const invalid = await block("PRODUCTION", "31-02-2026\npearl 4");
+    const invalid = await block("PRODUCTION", "31-02-2026\npearl 3");
     expect(planProduction(pwInput(invalid, "PRODUCTION", values)).status).toBe("REQUIRES_CLARIFICATION");
   });
 });

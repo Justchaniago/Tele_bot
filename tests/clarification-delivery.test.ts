@@ -91,7 +91,7 @@ describe("durable clarification delivery", () => {
     const sent: string[] = []; const edits: string[] = [];
     const deps = dependencies({ send: async (_chat, text) => { sent.push(text); return "primary-1"; }, edit: async (_chat, _id, text) => { edits.push(text); } });
     const worker = new WorkerService(repo, deps.reader, deps.writer, createLogger("debug", () => undefined), deps.notifier, () => now);
-    const update = await repo.acceptUpdate({ ...input(), updateId: 7002 }, [{ blockIndex: 0, store: "TP6", domain: "PRODUCTION", rawBlockBody: "07-09-2026\npearl 5", initialStatus: "RECEIVED", decision: { status: "REQUIRES_CLARIFICATION", reasons: ["RECEIVED"] }, now }]);
+    const update = await repo.acceptUpdate({ ...input(), updateId: 7002 }, [{ blockIndex: 0, store: "TP6", domain: "PRODUCTION", rawBlockBody: "07-09-2026\npearl 3", initialStatus: "RECEIVED", decision: { status: "REQUIRES_CLARIFICATION", reasons: ["RECEIVED"] }, now }]);
 
     await worker.drain(10);
 
@@ -124,7 +124,7 @@ describe("durable clarification delivery", () => {
     const sent: string[] = []; const edits: string[] = [];
     const deps = dependencies({ send: async (_chat, text) => { sent.push(text); return `message-${sent.length}`; }, edit: async (_chat, _id, text) => { edits.push(text); if (text.includes("Berhasil")) throw new TelegramDeliveryError("edit unavailable", "FINAL"); } });
     const worker = new WorkerService(repo, deps.reader, deps.writer, createLogger("debug", () => undefined), deps.notifier, () => now);
-    const update = await repo.acceptUpdate({ ...input(), updateId: 7004 }, [{ blockIndex: 0, store: "TP6", domain: "PRODUCTION", rawBlockBody: "07-09-2026\npearl 5", initialStatus: "RECEIVED", decision: { status: "REQUIRES_CLARIFICATION", reasons: ["RECEIVED"] }, now }]);
+    const update = await repo.acceptUpdate({ ...input(), updateId: 7004 }, [{ blockIndex: 0, store: "TP6", domain: "PRODUCTION", rawBlockBody: "07-09-2026\npearl 3", initialStatus: "RECEIVED", decision: { status: "REQUIRES_CLARIFICATION", reasons: ["RECEIVED"] }, now }]);
 
     await worker.drain(10);
     await worker.drain(10);

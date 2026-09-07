@@ -198,7 +198,13 @@ export function planProductionWaste(
     }
     const effect = { store: input.store, domain, date: date!, canonicalSkuId: item.canonicalSkuId, target: item.target, expectedOldValue: existing, desiredValue, operation, provenance: item.provenance };
     effects.push(effect);
-    if (existing !== null) corrections.push({ store: input.store, domain, date: date!, canonicalSkuId: item.canonicalSkuId, target: item.target, oldValue: existing, proposedValue: desiredValue, operation });
+    const requiresCorrectionConfirmation = existing !== null;
+    const requiresProductionPearlConfirmation = domain === "PRODUCTION"
+      && item.canonicalSkuId === "PEARL_BASE"
+      && item.quantity > 3;
+    if (requiresCorrectionConfirmation || requiresProductionPearlConfirmation) {
+      corrections.push({ store: input.store, domain, date: date!, canonicalSkuId: item.canonicalSkuId, target: item.target, oldValue: existing, proposedValue: desiredValue, operation });
+    }
   }
   return resultFromPlan(buildPlan(input.store, domain, date!, effects, noOps, corrections, corrections.length === 0));
 }
