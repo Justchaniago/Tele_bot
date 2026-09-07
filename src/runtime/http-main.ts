@@ -1,0 +1,30 @@
+import { loadConfig, V2_RUNTIME_SERVICE_ACCOUNT } from "../config/env.js";
+import { createLogger } from "../observability/logger.js";
+import { startHttpServer } from "./http.js";
+import { FirestoreDurableStateRepository } from "../persistence/firestore-repository.js";
+import { createGoogleSheetsClient } from "../sheets/google-sheets-client.js";
+import { SheetsReader } from "../sheets/sheets-reader.js";
+import { SheetsWriter } from "../sheets/sheets-writer.js";
+import { IngestionService } from "../app/ingestion.js";
+import { WorkerService } from "../app/worker-service.js";
+import { TelegramApiNotifier } from "../telegram/notifier.js";
+import { CloudTasksClient } from "@google-cloud/tasks";
+import { CloudTasksWorkerWakeup } from "./worker-wakeup.js";
+import { VertexAiSkuResolver } from "../parsing/vertex-ai-sku-resolver.js";
+
+const config = loadConfig();
+const logger = createLogger(config.logLevel);
+const repository = new FirestoreDurableStateRepository({ projectId: config.firestoreProjectId, databaseId: config.firestoreDatabaseId });
+const sheets = createGoogleSheetsClient();
+const reader = new SheetsReader(sheets as unknown as ConstructorParameters<typeof SheetsReader>[0]);
+const writer = new SheetsWriter(sheets as unknown as ConstructorParameters<typeof SheetsWriter>[0]);
+const wakeup = config.workerWakeupEnabled ? (() => {
+  if (!config.cloudTasksQueue || !config.workerTargetUrl || !config.workerAuthToken) throw new Error("Cloud Tasks wakeup requires CLOUD_TASKS_QUEUE, WORKER_TARGET_URL, and WORKER_AUTH_TOKEN");
+  const cloudTasks = new CloudTasksClient();
+  return new CloudTasksWorkerWakeup({ queuePath: (project, location, queue) => cloudTasks.queuePath(project, location, queue), createTask: request => cloudTasks.createTask(request) }, { projectId: config.cloudTasksProjectId!, location: config.cloudTasksLocation!, queue: config.cloudTasksQueue, targetUrl: config.workerTargetUrl, serviceAccountEmail: config.runtimeServiceAccount ?? V2_RUNTIME_SERVICE_ACCOUNT, workerAuthToken: config.workerAuthToken });
+})() : undefined;
+const ingestion = new IngestionService(repository, config, undefined, wakeup);
+const notifier = config.telegramBotToken ? new TelegramApiNotifier(config.telegramBotToken) : undefined;
+const vertexAiResolver = new VertexAiSkuResolver({ projectId: config.vertexAiProjectId!, location: config.vertexAiLocation!, model: config.vertexAiModel!, timeoutMs: config.vertexAiTimeoutMs! });
+const worker = new WorkerService(repository, reader, writer, logger, notifier, undefined, config.executionLeaseMs, vertexAiResolver);
+startHttpServer(config, logger, { ingestion, worker });
