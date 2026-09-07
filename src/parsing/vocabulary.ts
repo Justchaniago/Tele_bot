@@ -83,7 +83,7 @@ export function normalizeText(value: string): string {
   return value
     .normalize("NFKC")
     .toLowerCase()
-    .replace(/[(){}_,:\-]+/g, " ")
+    .replace(/[(){}_,=:\-]+/g, " ")
     .replace(/[\/\\]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();

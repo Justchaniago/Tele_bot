@@ -217,7 +217,26 @@ describe("AI fallback contract", () => {
     expect(unknown.items[0].status).toBe("UNKNOWN");
     const ambiguous = await parseCommandBlock({ domain: "DAILY_SO", body: "07-09-2026\nmedium 4" }, { now, aiResolver: { resolve } });
     expect(ambiguous.items[0].status).toBe("AMBIGUOUS");
-    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(resolve).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses AI only for residual ambiguity and restricts it to ambiguous candidates", async () => {
+    const resolve = vi.fn().mockResolvedValue({ status: "RESOLVED", candidateSkuId: "Y16_LOCAL_MEDIUM_CUP" });
+    const result = await parseCommandBlock({
+      domain: "DAILY_SO",
+      body: "07-09-2026\nmedium 4"
+    }, { now, aiResolver: { resolve } });
+
+    expect(result.status).toBe("PARSE_READY");
+    expect(result.items[0]).toMatchObject({
+      status: "RESOLVED",
+      canonicalSkuId: "Y16_LOCAL_MEDIUM_CUP",
+      resolver: "AI_FALLBACK"
+    });
+    expect(resolve).toHaveBeenCalledWith(expect.objectContaining({
+      normalizedTerm: "medium",
+      candidates: ["Y16_G1_MEDIUM_CUP", "Y16_LOCAL_MEDIUM_CUP"]
+    }));
   });
 });
 

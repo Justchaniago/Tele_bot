@@ -42,12 +42,12 @@ describe("VertexAiSkuResolver", () => {
     expect(result).toEqual({ status: "UNKNOWN" });
   });
 
-  it("does not invoke Vertex for deterministic exact resolution or deterministic ambiguity", async () => {
-    const fake = fakeVertex({ text: '{"status":"RESOLVED","candidateSkuId":"PEARL_BASE"}' });
+  it("does not invoke Vertex for exact resolution, but uses it for deterministic ambiguity", async () => {
+    const fake = fakeVertex({ text: '{"status":"RESOLVED","candidateSkuId":"Y16_LOCAL_MEDIUM_CUP"}' });
     const exact = await parseCommandBlock({ domain: "PRODUCTION", body: "07-09-2026\npearl 4" }, { now: new Date("2026-09-07T00:00:00Z"), aiResolver: new VertexAiSkuResolver(baseConfig, fake.client) });
     const ambiguous = await parseCommandBlock({ domain: "DAILY_SO", body: "07-09-2026\nmedium 4" }, { now: new Date("2026-09-07T00:00:00Z"), aiResolver: new VertexAiSkuResolver(baseConfig, fake.client) });
     expect(exact.items[0].resolver).toBe("EXACT_ALIAS");
-    expect(ambiguous.items[0].status).toBe("AMBIGUOUS");
-    expect(fake.calls.count).toBe(0);
+    expect(ambiguous.items[0]).toMatchObject({ status: "RESOLVED", canonicalSkuId: "Y16_LOCAL_MEDIUM_CUP", resolver: "AI_FALLBACK" });
+    expect(fake.calls.count).toBe(1);
   });
 });

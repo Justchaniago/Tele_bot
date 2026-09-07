@@ -149,9 +149,13 @@ async function resolveTerm(
   aiResolver?: AiSkuResolver
 ): Promise<ParsedItem> {
   const local = resolveSku(rawTerm, domain);
-  if (local.status !== "UNKNOWN" || !aiResolver) return resolutionToItem(rawLine, rawTerm, quantity, local);
+  if (!aiResolver || (local.status !== "UNKNOWN" && local.status !== "AMBIGUOUS")) {
+    return resolutionToItem(rawLine, rawTerm, quantity, local);
+  }
 
-  const candidates = candidatesForDomain(domain).map(entry => entry.canonicalSkuId);
+  const candidates = local.status === "AMBIGUOUS"
+    ? local.candidates
+    : candidatesForDomain(domain).map(entry => entry.canonicalSkuId);
   try {
     const aiResult = validateAiSkuResponse(await aiResolver.resolve({
       domain,
@@ -179,7 +183,8 @@ async function resolveTerm(
       };
     }
   } catch {
-    // Provider failure becomes safe UNKNOWN below.
+    // Provider failure preserves deterministic ambiguity or becomes safe UNKNOWN.
+    if (local.status === "AMBIGUOUS") return resolutionToItem(rawLine, rawTerm, quantity, local);
   }
   return {
     rawLine,
