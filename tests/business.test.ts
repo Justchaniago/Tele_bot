@@ -217,11 +217,13 @@ describe("M4 parser and date gates", () => {
 
   it("blocks unresolved parser outcomes and quantity policy", async () => {
     const values = Object.fromEntries(Object.keys(DAILY_SO_SCHEMAS.PMS).map(sku => [sku, null]));
-    for (const body of [`${date}\nmedium 4`, `${date}\nnot-a-sku 4`, `${date}\nfreshmilk`, `${date}\nfreshmilk 10abc`, `${date}\npearl 1\npearl 2`]) {
+    for (const body of [`${date}\nmedium 4`, `${date}\nnot-a-sku 4`, `${date}\nfreshmilk 10abc`, `${date}\npearl 1\npearl 2`]) {
       const parsed = await block("DAILY_SO", body);
       const result = planDailySo(dailyInput(parsed, values, "NOT_ESTABLISHED"));
       expect(result.status).toBe("REQUIRES_CLARIFICATION");
     }
+    const blankQuantity = await block("DAILY_SO", `${date}\nfreshmilk`);
+    expect(planDailySo(dailyInput(blankQuantity, values, "NOT_ESTABLISHED")).status).toBe("READY");
   });
 
   it("supports historical planning, blocks future and invalid dates", async () => {

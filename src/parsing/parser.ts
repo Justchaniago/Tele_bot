@@ -92,7 +92,12 @@ function quantityFromLine(line: string): {
   quantityValue?: number;
   malformedQuantity?: string;
 } {
-  const separated = line.trim().replace(/([^\s:=])\s*[:=]\s*(?=[+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+))/g, "$1 ");
+  const trimmed = line.trim();
+  const blankSeparator = trimmed.match(/^(.+?)\s*[:=]\s*(?:-\s*)?$/);
+  if (blankSeparator) return { term: blankSeparator[1].trim() };
+  const blankDash = trimmed.match(/^(.+?)\s+-\s*$/);
+  if (blankDash) return { term: blankDash[1].trim() };
+  const separated = trimmed.replace(/([^\s:=])\s*[:=]\s*(?=[+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+))/g, "$1 ");
   const tokens = separated.split(/\s+/);
   if (tokens.length < 2) return { term: line.trim() };
   const unitPattern = /^(?:kg|kgs|kilogram|kilograms|kilo|kilos|g|gram|grams|pcs|pc|piece|pieces|unit|units|liter|liters|litre|litres|l|ml)$/i;
@@ -126,17 +131,21 @@ function resolutionToItem(
   rawLine: string,
   rawTerm: string,
   quantity: ReturnType<typeof quantityFromLine>,
-  resolution: SkuResolution
+  resolution: SkuResolution,
+  domain: DomainId
 ): ParsedItem {
+  const effectiveQuantity = domain === "DAILY_SO" && resolution.status === "RESOLVED" && !quantity.quantityToken && !quantity.malformedQuantity
+    ? { ...quantity, quantityToken: "0", quantityValue: 0 }
+    : quantity;
   const base = {
     rawLine,
     rawTerm,
     normalizedTerm: normalizeText(rawTerm),
-    ...(quantity.quantityToken
-      ? { quantityToken: quantity.quantityToken, quantityValue: quantity.quantityValue }
-      : quantity.malformedQuantity ? { quantityToken: quantity.malformedQuantity } : {})
+    ...(effectiveQuantity.quantityToken
+      ? { quantityToken: effectiveQuantity.quantityToken, quantityValue: effectiveQuantity.quantityValue }
+      : effectiveQuantity.malformedQuantity ? { quantityToken: effectiveQuantity.malformedQuantity } : {})
   };
-  if (quantity.malformedQuantity) {
+  if (effectiveQuantity.malformedQuantity) {
     return { ...base, status: "MALFORMED_QUANTITY" };
   }
   if (resolution.status === "RESOLVED") {
@@ -145,7 +154,7 @@ function resolutionToItem(
       canonicalSkuId: resolution.canonicalSkuId,
       resolver: resolution.resolver,
       confidence: resolution.confidence,
-      status: quantity.quantityToken ? "RESOLVED" : "NEEDS_CLARIFICATION"
+      status: effectiveQuantity.quantityToken ? "RESOLVED" : "NEEDS_CLARIFICATION"
     };
   }
   if (resolution.status === "AMBIGUOUS") {
@@ -174,7 +183,7 @@ async function resolveTerm(
   }
   const local = resolveSku(rawTerm, domain);
   if (!aiResolver || (local.status !== "UNKNOWN" && local.status !== "AMBIGUOUS")) {
-    return resolutionToItem(rawLine, rawTerm, quantity, local);
+    return resolutionToItem(rawLine, rawTerm, quantity, local, domain);
   }
 
   const domainCandidates = candidatesForDomain(domain);
@@ -200,7 +209,7 @@ async function resolveTerm(
         status: "RESOLVED",
         canonicalSkuId: aiResult.canonicalSkuId,
         resolver: "EXACT_CANONICAL"
-      });
+      }, domain);
       return { ...item, resolver: "AI_FALLBACK" };
     }
     if (aiResult.status === "AMBIGUOUS") {
@@ -217,7 +226,7 @@ async function resolveTerm(
     }
   } catch {
     // Provider failure preserves deterministic ambiguity or becomes safe UNKNOWN.
-    if (local.status === "AMBIGUOUS") return resolutionToItem(rawLine, rawTerm, quantity, local);
+    if (local.status === "AMBIGUOUS") return resolutionToItem(rawLine, rawTerm, quantity, local, domain);
   }
   return {
     rawLine,

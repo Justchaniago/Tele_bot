@@ -50,6 +50,25 @@ describe("commands and normalization", () => {
     });
   });
 
+  it("treats blank or dash quantity as zero only for valid Daily SO SKUs", async () => {
+    const daily = await parseCommandBlock({
+      domain: "DAILY_SO",
+      body: "07-09-2026\nlarge:\nsmall -\nfreshmilk"
+    }, { now });
+    expect(daily.status).toBe("PARSE_READY");
+    expect(daily.items).toMatchObject([
+      { canonicalSkuId: "Y22_G1_LARGE_CUP", quantityToken: "0", quantityValue: 0, status: "RESOLVED" },
+      { canonicalSkuId: "Y12_G1_SMALL_CUP", quantityToken: "0", quantityValue: 0, status: "RESOLVED" },
+      { canonicalSkuId: "FRESH_MILK_DIAMOND_946ML", quantityToken: "0", quantityValue: 0, status: "RESOLVED" }
+    ]);
+
+    const production = await parseCommandBlock({
+      domain: "PRODUCTION",
+      body: "07-09-2026\npearl:"
+    }, { now });
+    expect(production.items[0]).toMatchObject({ canonicalSkuId: "PEARL_BASE", status: "NEEDS_CLARIFICATION" });
+  });
+
   it("resolves the controlled Production smoke vocabulary with colon separators", async () => {
     const result = await parseCommandBlock({
       domain: "PRODUCTION",
