@@ -92,19 +92,32 @@ function quantityFromLine(line: string): {
   quantityValue?: number;
   malformedQuantity?: string;
 } {
-  const tokens = line.trim().split(/\s+/);
+  const separated = line.trim().replace(/([^\s:=])\s*[:=]\s*(?=[+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+))/g, "$1 ");
+  const tokens = separated.split(/\s+/);
   if (tokens.length < 2) return { term: line.trim() };
-  const last = tokens[tokens.length - 1];
+  const unitPattern = /^(?:kg|kgs|kilogram|kilograms|kilo|kilos|g|gram|grams|pcs|pc|piece|pieces|unit|units|liter|liters|litre|litres|l|ml)$/i;
+  const attachedQuantityPattern = /^([+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+))(kg|kgs|kilogram|kilograms|kilo|kilos|g|gram|grams|pcs|pc|piece|pieces|unit|units|liter|liters|litre|litres|l|ml)$/i;
+  let quantityIndex = tokens.length - 1;
+  let last = tokens[quantityIndex];
+  if (unitPattern.test(last) && quantityIndex > 0) {
+    quantityIndex -= 1;
+    last = tokens[quantityIndex];
+  } else {
+    const attached = last.match(attachedQuantityPattern);
+    if (attached) {
+      last = attached[1];
+    }
+  }
   const numericPattern = /^[+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+)$/;
   if (numericPattern.test(last)) {
     return {
-      term: tokens.slice(0, -1).join(" "),
+      term: tokens.slice(0, quantityIndex).join(" "),
       quantityToken: last,
       quantityValue: Number(last.replace(",", "."))
     };
   }
   if (/^[+-]?(?:\d|[.,])/.test(last)) {
-    return { term: tokens.slice(0, -1).join(" "), malformedQuantity: last };
+    return { term: tokens.slice(0, quantityIndex).join(" "), malformedQuantity: last };
   }
   return { term: line.trim() };
 }

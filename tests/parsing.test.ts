@@ -76,9 +76,42 @@ describe("commands and normalization", () => {
     }, { now, aiResolver: { resolve } });
 
     expect(result.status).toBe("PARSE_READY");
-    expect(result.items[0]).toMatchObject({ rawTerm: "cup L polos :", status: "IGNORED" });
+    expect(result.items[0]).toMatchObject({ rawTerm: "cup L polos", status: "IGNORED" });
     expect(result.items[1]).toMatchObject({ canonicalSkuId: "Y22_G1_LARGE_CUP", status: "RESOLVED" });
     expect(resolve).not.toHaveBeenCalled();
+  });
+
+  it("ignores common unit suffixes without changing the quantity value", async () => {
+    const production = await parseCommandBlock({
+      domain: "PRODUCTION",
+      body: "07.09.2026\npearl: 0.3 kg"
+    }, { now });
+    expect(production).toMatchObject({ status: "PARSE_READY" });
+    expect(production.items[0]).toMatchObject({ canonicalSkuId: "PEARL_BASE", quantityToken: "0.3", quantityValue: 0.3, status: "RESOLVED" });
+
+    const daily = await parseCommandBlock({
+      domain: "DAILY_SO",
+      body: "07.09.2026\nlarge 1926 pcs\nsmall 354pcs"
+    }, { now });
+    expect(daily).toMatchObject({ status: "PARSE_READY" });
+    expect(daily.items).toMatchObject([
+      { canonicalSkuId: "Y22_G1_LARGE_CUP", quantityToken: "1926", quantityValue: 1926, status: "RESOLVED" },
+      { canonicalSkuId: "Y12_G1_SMALL_CUP", quantityToken: "354", quantityValue: 354, status: "RESOLVED" }
+    ]);
+  });
+
+  it("accepts attached colon or equals quantity separators and operational aliases", async () => {
+    const result = await parseCommandBlock({
+      domain: "PRODUCTION",
+      body: "07.09.2026\nHerbal jelly :150\nMilkfoam=800\nAiyu jelly:30"
+    }, { now });
+
+    expect(result.status).toBe("PARSE_READY");
+    expect(result.items).toMatchObject([
+      { canonicalSkuId: "HERBAL_JELLY_BASE", quantityValue: 150, status: "RESOLVED" },
+      { canonicalSkuId: "MILK_FOAM_BASE", quantityValue: 800, status: "RESOLVED" },
+      { canonicalSkuId: "AI_YU_BASE", quantityValue: 30, status: "RESOLVED" }
+    ]);
   });
 
   it("segments independent command blocks and retains empty context", async () => {
