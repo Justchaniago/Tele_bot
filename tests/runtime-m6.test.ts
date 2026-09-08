@@ -29,6 +29,22 @@ describe("M6 webhook acceptance", () => {
     expect((await repository.getRun(stored!.blockRunIds[0]))?.store).toBe("PMS");
   });
 
+  it("accepts an edited PMS group command through the same trusted-store path", async () => {
+    const repository = new InMemoryDurableStateRepository();
+    let wakeups = 0;
+    const service = new IngestionService(repository, config, () => new Date("2026-09-08T00:00:00Z"), { enqueue: async () => { wakeups++; } });
+    const update = validateTelegramUpdate({ update_id: 119, edited_message: { message_id: 41, chat: { id: 10 }, from: { id: 20 }, text: "/produksi\n07-09-2026\npearl: 0.3" } });
+
+    await service.accept(update);
+    await service.accept(update);
+
+    const stored = await repository.getUpdate("test-bot:119");
+    expect(stored).toMatchObject({ chatId: "10", userId: "20", messageId: "41" });
+    expect(stored?.blockRunIds).toEqual(["test-bot:119:block:0"]);
+    expect(await repository.getRun("test-bot:119:block:0")).toMatchObject({ store: "PMS", domain: "PRODUCTION", status: "RECEIVED" });
+    expect(wakeups).toBe(2);
+  });
+
   it("does not let message text choose store", async () => {
     const repository = new InMemoryDurableStateRepository();
     const service = new IngestionService(repository, config);

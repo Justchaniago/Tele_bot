@@ -5,6 +5,7 @@ import { resolveProductionTarget, resolveWasteTarget } from "../src/sheets/targe
 import { CloudTasksWorkerWakeup } from "../src/runtime/worker-wakeup.js";
 import { InMemoryDurableStateRepository } from "../src/persistence/repository.js";
 import { createHttpHandler } from "../src/runtime/http.js";
+import { WebhookInputError } from "../src/app/ingestion.js";
 import type { AppConfig } from "../src/config/env.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Logger } from "../src/observability/logger.js";
@@ -91,6 +92,25 @@ describe("M6 corrective contracts", () => {
   it("fails closed when active wakeup lacks worker token", () => {
     const client = { queuePath: () => "queue", createTask: async () => undefined };
     expect(() => new CloudTasksWorkerWakeup(client, { projectId: "tele-auto-v2-prod", location: "asia-southeast2", queue: "q", targetUrl: "https://worker", serviceAccountEmail: "runtime@example.com", workerAuthToken: " " })).toThrow("worker auth token");
+  });
+
+  it("logs safe Telegram update shape when a message lacks actor identity", async () => {
+    const warnings: Array<{ message: string; context?: Record<string, unknown> }> = [];
+    const logger: Logger = { debug() {}, info() {}, error() {}, warn(message, context) { warnings.push({ message, context }); } };
+    const config: AppConfig = { nodeEnv: "test", port: 8080, logLevel: "info", telegramWebhookSecret: "webhook-secret", trustedTelegramChats: { "10": "PMS" } };
+    const response = responseDouble();
+    const request = {
+      method: "POST", url: "/telegram/webhook", headers: { "x-telegram-bot-api-secret-token": "webhook-secret" },
+      setEncoding() {}, on(event: string, callback: (value?: unknown) => void) {
+        if (event === "data") callback(JSON.stringify({ update_id: 901, message: { chat: { id: 10 }, text: "/produksi" } }));
+        if (event === "end") callback();
+        return this;
+      }
+    } as unknown as IncomingMessage;
+    await createHttpHandler(config, logger, { ingestion: { accept: async () => { throw new WebhookInputError("must not be called"); } } })(request, response.value);
+    expect(response.status()).toBe(400);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({ message: "Telegram webhook rejected", context: { updateId: 901, updateShape: "MESSAGE", hasChatId: true, hasFromId: false, chatId: "10", rejection: "WebhookInputError" } });
   });
 });
 

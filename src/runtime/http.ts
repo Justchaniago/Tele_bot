@@ -18,8 +18,13 @@ export function createHttpHandler(config: AppConfig, logger: Logger, dependencie
     if (request.method === "POST" && request.url === "/telegram/webhook") {
       if (!config.telegramWebhookSecret || request.headers["x-telegram-bot-api-secret-token"] !== config.telegramWebhookSecret) { response.statusCode = 401; response.end(JSON.stringify({ status: "unauthorized" })); return; }
       if (!dependencies.ingestion) { response.statusCode = 503; response.end(JSON.stringify({ status: "ingestion_unavailable" })); return; }
-      try { await dependencies.ingestion.accept(validateTelegramUpdate(await readJson(request))); response.statusCode = 200; response.end(JSON.stringify({ status: "accepted" })); }
-      catch (error) { response.statusCode = error instanceof WebhookAuthError ? 403 : error instanceof Error && error.name === "WebhookInputError" ? 400 : 503; response.end(JSON.stringify({ status: response.statusCode === 503 ? "retryable_failure" : "rejected" })); }
+      let payload: unknown;
+      try { payload = await readJson(request); await dependencies.ingestion.accept(validateTelegramUpdate(payload)); response.statusCode = 200; response.end(JSON.stringify({ status: "accepted" })); }
+      catch (error) {
+        const status = error instanceof WebhookAuthError ? 403 : error instanceof Error && error.name === "WebhookInputError" ? 400 : 503;
+        logger.warn("Telegram webhook rejected", { ...summarizeTelegramUpdate(payload), rejection: status === 503 ? "RETRYABLE_FAILURE" : error instanceof Error ? error.name : "UNKNOWN_ERROR" });
+        response.statusCode = status; response.end(JSON.stringify({ status: status === 503 ? "retryable_failure" : "rejected" }));
+      }
       return;
     }
     if (request.method === "POST" && request.url === "/internal/worker/drain") {
@@ -32,6 +37,20 @@ export function createHttpHandler(config: AppConfig, logger: Logger, dependencie
     response.statusCode = 404;
     response.end(JSON.stringify({ status: "not_found" }));
     logger.debug("HTTP route not found", { path: request.url });
+  };
+}
+
+function summarizeTelegramUpdate(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") return { updateShape: "INVALID" };
+  const candidate = value as { update_id?: unknown; message?: { chat?: { id?: unknown }; from?: { id?: unknown } }; callback_query?: { message?: { chat?: { id?: unknown } }; from?: { id?: unknown } }; edited_message?: { chat?: { id?: unknown }; from?: { id?: unknown } }; channel_post?: unknown };
+  const message = candidate.message ?? candidate.edited_message;
+  const callback = candidate.callback_query;
+  return {
+    updateId: typeof candidate.update_id === "number" ? candidate.update_id : undefined,
+    updateShape: candidate.message ? "MESSAGE" : callback ? "CALLBACK_QUERY" : candidate.edited_message ? "EDITED_MESSAGE" : candidate.channel_post ? "CHANNEL_POST" : "UNSUPPORTED",
+    hasChatId: message?.chat?.id !== undefined || callback?.message?.chat?.id !== undefined,
+    hasFromId: message?.from?.id !== undefined || callback?.from?.id !== undefined,
+    chatId: message?.chat?.id !== undefined ? String(message.chat.id) : callback?.message?.chat?.id !== undefined ? String(callback.message.chat.id) : undefined
   };
 }
 

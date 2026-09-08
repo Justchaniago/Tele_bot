@@ -52,6 +52,11 @@ describe("Production and Waste business semantics", () => {
     if (clear.status === "REQUIRES_CONFIRMATION") expect(clear.plan.effects[0]).toMatchObject({ desiredValue: null, operation: "CLEAR" });
     const blankZero = planner(pwInput(await block(domain, `${date}\npearl 0`), domain, { PEARL_BASE: null }));
     expect(blankZero.status).toBe("NO_OP");
+    const numericZero = planner(pwInput(await block(domain, `${date}\npearl 0`), domain, { PEARL_BASE: 0 }));
+    expect(numericZero.status).toBe("REQUIRES_CONFIRMATION");
+    if (numericZero.status === "REQUIRES_CONFIRMATION") expect(numericZero.plan.effects[0]).toMatchObject({ desiredValue: null, operation: "CLEAR" });
+    const zeroToValue = planner(pwInput(await block(domain, `${date}\npearl 3`), domain, { PEARL_BASE: 0 }));
+    expect(zeroToValue.status).toBe("REQUIRES_CONFIRMATION");
   });
 
   it("omits P/W SKUs and never accumulates", async () => {
@@ -185,7 +190,13 @@ describe("M4 parser and date gates", () => {
       expect(validateBusinessQuantity("PRODUCTION", token).status).toBe("INVALID");
     }
     for (const token of ["0", "1", "5", "125"]) expect(validateBusinessQuantity("DAILY_SO", token).status).toBe("VALID");
+    expect(validateBusinessQuantity("DAILY_SO", "1.900")).toMatchObject({ status: "VALID", value: 1900, normalizedToken: "1900" });
+    expect(validateBusinessQuantity("DAILY_SO", "2,500")).toMatchObject({ status: "VALID", value: 2500, normalizedToken: "2500" });
+    expect(validateBusinessQuantity("DAILY_SO", "1.000.000")).toMatchObject({ status: "VALID", value: 1000000 });
     for (const token of ["-1", "1.5", "1,5", "0.5", "2.00", "NaN", "Infinity", "bad"]) {
+      expect(validateBusinessQuantity("DAILY_SO", token).status).toBe("INVALID");
+    }
+    for (const token of ["1,23", "1,234.567", "1.234,567", "1.2345"]) {
       expect(validateBusinessQuantity("DAILY_SO", token).status).toBe("INVALID");
     }
   });

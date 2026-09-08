@@ -8,13 +8,23 @@ import type { WorkerWakeup } from "../runtime/worker-wakeup.js";
 export class WebhookInputError extends Error { constructor(message: string) { super(message); this.name = "WebhookInputError"; } }
 export class WebhookAuthError extends Error { constructor(message: string) { super(message); this.name = "WebhookAuthError"; } }
 
-export type TelegramUpdate = { readonly update_id: number; readonly message?: { readonly message_id?: number; readonly chat?: { readonly id?: number | string }; readonly from?: { readonly id?: number | string }; readonly text?: string }; readonly callback_query?: { readonly id?: string; readonly from?: { readonly id?: number | string }; readonly message?: { readonly chat?: { readonly id?: number | string } }; readonly data?: string } };
+type TelegramMessage = { readonly message_id?: number; readonly chat?: { readonly id?: number | string }; readonly from?: { readonly id?: number | string }; readonly text?: string };
+
+export type TelegramUpdate = {
+  readonly update_id: number;
+  readonly message?: TelegramMessage;
+  readonly edited_message?: TelegramMessage;
+  readonly callback_query?: { readonly id?: string; readonly from?: { readonly id?: number | string }; readonly message?: { readonly chat?: { readonly id?: number | string } }; readonly data?: string };
+};
 
 export class IngestionService {
   constructor(private readonly repository: DurableStateRepository, private readonly config: AppConfig, private readonly now = () => new Date(), private readonly wakeup?: WorkerWakeup) {}
 
   async accept(update: TelegramUpdate): Promise<void> {
-    const identity = update.message ? { chat: update.message.chat?.id, user: update.message.from?.id, message: update.message.message_id, text: update.message.text } : { chat: update.callback_query?.message?.chat?.id, user: update.callback_query?.from?.id, message: undefined, text: undefined };
+    const telegramMessage = update.message ?? update.edited_message;
+    const identity = telegramMessage
+      ? { chat: telegramMessage.chat?.id, user: telegramMessage.from?.id, message: telegramMessage.message_id, text: telegramMessage.text }
+      : { chat: update.callback_query?.message?.chat?.id, user: update.callback_query?.from?.id, message: undefined, text: undefined };
     if (identity.chat === undefined || identity.user === undefined) throw new WebhookInputError("Telegram update lacks trusted chat/user identity");
     const chatId = String(identity.chat); const userId = String(identity.user);
     const store = this.config.trustedTelegramChats?.[chatId];
@@ -42,6 +52,6 @@ export function validateTelegramUpdate(value: unknown): TelegramUpdate {
   if (!value || typeof value !== "object") throw new WebhookInputError("Telegram update must be an object");
   const update = value as Partial<TelegramUpdate>;
   if (!Number.isSafeInteger(update.update_id) || update.update_id! < 0) throw new WebhookInputError("Telegram update_id is invalid");
-  if (!update.message && !update.callback_query) throw new WebhookInputError("Unsupported Telegram update");
+  if (!update.message && !update.edited_message && !update.callback_query) throw new WebhookInputError("Unsupported Telegram update");
   return update as TelegramUpdate;
 }
