@@ -187,9 +187,10 @@ async function resolveTerm(
   }
 
   const domainCandidates = candidatesForDomain(domain);
-  const candidates = local.status === "AMBIGUOUS"
-    ? local.candidates
-    : domainCandidates.map(entry => entry.canonicalSkuId);
+  // AI is the bounded semantic fallback: give it the complete canonical
+  // vocabulary for the active domain so abbreviations such as "mt lokal"
+  // cannot be excluded by an overly narrow fuzzy shortlist.
+  const candidates = domainCandidates.map(entry => entry.canonicalSkuId);
   const candidateContext = domainCandidates
     .filter(entry => candidates.includes(entry.canonicalSkuId))
     .map(entry => ({

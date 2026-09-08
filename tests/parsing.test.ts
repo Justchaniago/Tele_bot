@@ -182,6 +182,16 @@ describe("domain vocabulary resolution", () => {
     });
     expect(resolveSku("black tea", "PRODUCTION").status).toBe("AMBIGUOUS");
     expect(resolveSku("pudding", "PRODUCTION").status).toBe("AMBIGUOUS");
+    expect(resolveSku("pudding lokal", "PRODUCTION")).toMatchObject({
+      status: "RESOLVED",
+      canonicalSkuId: "PUDDING_BASE",
+      resolver: "EXACT_ALIAS"
+    });
+    expect(resolveSku("pudding local", "WASTE")).toMatchObject({
+      status: "RESOLVED",
+      canonicalSkuId: "PUDDING_BASE",
+      resolver: "EXACT_ALIAS"
+    });
   });
 
   it("handles conservative fuzzy outcomes", () => {
@@ -285,7 +295,7 @@ describe("AI fallback contract", () => {
     expect(resolve).toHaveBeenCalledTimes(2);
   });
 
-  it("uses AI only for residual ambiguity and restricts it to ambiguous candidates", async () => {
+  it("uses the full bounded domain vocabulary for residual AI resolution", async () => {
     const resolve = vi.fn().mockResolvedValue({ status: "RESOLVED", candidateSkuId: "Y16_LOCAL_MEDIUM_CUP" });
     const result = await parseCommandBlock({
       domain: "DAILY_SO",
@@ -300,7 +310,21 @@ describe("AI fallback contract", () => {
     });
     expect(resolve).toHaveBeenCalledWith(expect.objectContaining({
       normalizedTerm: "medium",
-      candidates: ["Y16_G1_MEDIUM_CUP", "Y16_LOCAL_MEDIUM_CUP"]
+      candidates: expect.arrayContaining(["Y16_G1_MEDIUM_CUP", "Y16_LOCAL_MEDIUM_CUP"])
+    }));
+  });
+
+  it("lets AI resolve an abbreviation excluded by the fuzzy shortlist", async () => {
+    const resolve = vi.fn().mockResolvedValue({ status: "RESOLVED", candidateSkuId: "MILK_TEA_LOCAL_BASE" });
+    const result = await parseCommandBlock({
+      domain: "PRODUCTION",
+      body: "07-09-2026\nmt lokal 5"
+    }, { now, aiResolver: { resolve } });
+
+    expect(result).toMatchObject({ status: "PARSE_READY", items: [{ canonicalSkuId: "MILK_TEA_LOCAL_BASE", resolver: "AI_FALLBACK", status: "RESOLVED" }] });
+    expect(resolve).toHaveBeenCalledWith(expect.objectContaining({
+      normalizedTerm: "mt lokal",
+      candidates: expect.arrayContaining(["MILK_TEA_LOCAL_BASE", "GREEN_TEA_BASE", "PEACH_YOGHURT_BASE"])
     }));
   });
 });

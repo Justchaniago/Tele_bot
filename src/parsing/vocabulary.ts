@@ -30,7 +30,9 @@ const productionWaste: readonly [ProductionWasteSkuId, string, readonly string[]
   ["MILK_COFFEE_VARIETY_BASE", "MILK COFFEE BERAGAM BASE", ["coffee"]],
   ["HERBAL_JELLY_BASE", "HERBAL JELLY BASE", ["herbal jelly"]],
   ["AI_YU_BASE", "AI YU BASE", ["aiyu jelly", "ai yu jelly", "aiyu"]],
-  ["PUDDING_BASE", "PUDDING BASE", ["pudding"]],
+  // There is no separate local pudding SKU in the authoritative sheet.
+  // Treat the staff shorthand "pudding lokal" as the available pudding SKU.
+  ["PUDDING_BASE", "PUDDING BASE", ["pudding", "pudding lokal", "pudding local"]],
   ["PEARL_BASE", "PEARL BASE", ["pearl"]],
   ["MILK_FOAM_BASE", "MILK FOAM BASE", ["milkfoam", "milk foam"]],
   ["PISTACHIO_MILK_FOAM_BASE", "PISTACHIO MILK FOAM BASE", ["pistachio foam"]],
