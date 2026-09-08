@@ -6,6 +6,8 @@ export const V2_FIRESTORE_LOCATION = "asia-southeast2" as const;
 export const V2_RUNTIME_SERVICE_ACCOUNT = "tele-auto-runtime@tele-auto-v2-prod.iam.gserviceaccount.com" as const;
 export const V2_VERTEX_AI_LOCATION = "global" as const;
 export const V2_VERTEX_AI_MODEL = "gemini-3.1-flash-lite" as const;
+export const NEO_AVO_PROJECT_ID = "tele-auto" as const;
+export const NEO_AVO_ENVIRONMENT = "production" as const;
 
 export type AppConfig = {
   nodeEnv: NodeEnvironment;
@@ -32,6 +34,12 @@ export type AppConfig = {
   vertexAiLocation?: typeof V2_VERTEX_AI_LOCATION;
   vertexAiModel?: typeof V2_VERTEX_AI_MODEL;
   vertexAiTimeoutMs?: number;
+  neoAvoEnabled?: boolean;
+  neoAvoBaseUrl?: string;
+  neoAvoProjectId?: typeof NEO_AVO_PROJECT_ID;
+  neoAvoEnvironment?: typeof NEO_AVO_ENVIRONMENT;
+  neoAvoApiToken?: string;
+  neoAvoTimeoutMs?: number;
 };
 
 export class ConfigurationError extends Error {
@@ -104,6 +112,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (vertexAiLocation && vertexAiLocation !== V2_VERTEX_AI_LOCATION) throw new ConfigurationError(`VERTEX_AI_LOCATION must be ${V2_VERTEX_AI_LOCATION} for Tele Auto v2`);
   const vertexAiModel = optionalString(env.VERTEX_AI_MODEL);
   if (vertexAiModel && vertexAiModel !== V2_VERTEX_AI_MODEL) throw new ConfigurationError(`VERTEX_AI_MODEL must be ${V2_VERTEX_AI_MODEL} for Tele Auto v2`);
+  const neoAvoEnabled = booleanValue(env.NEO_AVO_ENABLED, false);
+  const neoAvoBaseUrl = optionalString(env.NEO_AVO_BASE_URL);
+  const neoAvoProjectId = optionalString(env.NEO_AVO_PROJECT_ID);
+  if (neoAvoProjectId && neoAvoProjectId !== NEO_AVO_PROJECT_ID) throw new ConfigurationError(`NEO_AVO_PROJECT_ID must be ${NEO_AVO_PROJECT_ID}`);
+  const neoAvoEnvironment = optionalString(env.NEO_AVO_ENVIRONMENT);
+  if (neoAvoEnvironment && neoAvoEnvironment !== NEO_AVO_ENVIRONMENT) throw new ConfigurationError(`NEO_AVO_ENVIRONMENT must be ${NEO_AVO_ENVIRONMENT}`);
+  const neoAvoApiToken = optionalString(env.NEO_AVO_API_TOKEN);
+  if (nodeEnv === "production" && neoAvoEnabled && (!neoAvoBaseUrl || !neoAvoApiToken)) throw new ConfigurationError("NEO_AVO_BASE_URL and NEO_AVO_API_TOKEN are required when Neo AVO telemetry is enabled");
   return {
     nodeEnv,
     port,
@@ -128,6 +144,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     vertexAiProjectId: V2_GCP_PROJECT_ID,
     vertexAiLocation: V2_VERTEX_AI_LOCATION,
     vertexAiModel: V2_VERTEX_AI_MODEL,
-    vertexAiTimeoutMs: positiveInteger(env.VERTEX_AI_TIMEOUT_MS, 8000, "VERTEX_AI_TIMEOUT_MS")
+    vertexAiTimeoutMs: positiveInteger(env.VERTEX_AI_TIMEOUT_MS, 8000, "VERTEX_AI_TIMEOUT_MS"),
+    neoAvoEnabled,
+    neoAvoBaseUrl,
+    neoAvoProjectId: NEO_AVO_PROJECT_ID,
+    neoAvoEnvironment: NEO_AVO_ENVIRONMENT,
+    neoAvoApiToken,
+    neoAvoTimeoutMs: positiveInteger(env.NEO_AVO_TIMEOUT_MS, 1000, "NEO_AVO_TIMEOUT_MS")
   };
 }

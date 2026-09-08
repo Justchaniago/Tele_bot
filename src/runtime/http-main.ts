@@ -11,9 +11,18 @@ import { TelegramApiNotifier } from "../telegram/notifier.js";
 import { CloudTasksClient } from "@google-cloud/tasks";
 import { CloudTasksWorkerWakeup } from "./worker-wakeup.js";
 import { VertexAiSkuResolver } from "../parsing/vertex-ai-sku-resolver.js";
+import { NeoAvoTelemetry } from "../observability/neo-avo-telemetry.js";
 
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
+const telemetry = config.neoAvoEnabled ? new NeoAvoTelemetry({
+  enabled: true,
+  baseUrl: config.neoAvoBaseUrl,
+  projectId: config.neoAvoProjectId!,
+  environment: config.neoAvoEnvironment!,
+  apiToken: config.neoAvoApiToken,
+  timeoutMs: config.neoAvoTimeoutMs!
+}) : undefined;
 const repository = new FirestoreDurableStateRepository({ projectId: config.firestoreProjectId, databaseId: config.firestoreDatabaseId });
 const sheets = createGoogleSheetsClient();
 const reader = new SheetsReader(sheets as unknown as ConstructorParameters<typeof SheetsReader>[0]);
@@ -23,8 +32,8 @@ const wakeup = config.workerWakeupEnabled ? (() => {
   const cloudTasks = new CloudTasksClient();
   return new CloudTasksWorkerWakeup({ queuePath: (project, location, queue) => cloudTasks.queuePath(project, location, queue), createTask: request => cloudTasks.createTask(request) }, { projectId: config.cloudTasksProjectId!, location: config.cloudTasksLocation!, queue: config.cloudTasksQueue, targetUrl: config.workerTargetUrl, serviceAccountEmail: config.runtimeServiceAccount ?? V2_RUNTIME_SERVICE_ACCOUNT, workerAuthToken: config.workerAuthToken });
 })() : undefined;
-const ingestion = new IngestionService(repository, config, undefined, wakeup);
+const ingestion = new IngestionService(repository, config, undefined, wakeup, telemetry);
 const notifier = config.telegramBotToken ? new TelegramApiNotifier(config.telegramBotToken) : undefined;
 const vertexAiResolver = new VertexAiSkuResolver({ projectId: config.vertexAiProjectId!, location: config.vertexAiLocation!, model: config.vertexAiModel!, timeoutMs: config.vertexAiTimeoutMs! });
-const worker = new WorkerService(repository, reader, writer, logger, notifier, undefined, config.executionLeaseMs, vertexAiResolver);
+const worker = new WorkerService(repository, reader, writer, logger, notifier, undefined, config.executionLeaseMs, vertexAiResolver, telemetry);
 startHttpServer(config, logger, { ingestion, worker });

@@ -4,6 +4,7 @@ import { segmentCommandBlocks } from "../parsing/parser.js";
 import type { DurableStateRepository } from "../persistence/repository.js";
 import type { AcceptUpdateInput, BlockRunSeed } from "../persistence/durable-types.js";
 import type { WorkerWakeup } from "../runtime/worker-wakeup.js";
+import { emitTelemetrySafely, stableTelemetryEventId, type OperationalTelemetry } from "../observability/neo-avo-telemetry.js";
 
 export class WebhookInputError extends Error { constructor(message: string) { super(message); this.name = "WebhookInputError"; } }
 export class WebhookAuthError extends Error { constructor(message: string) { super(message); this.name = "WebhookAuthError"; } }
@@ -18,7 +19,7 @@ export type TelegramUpdate = {
 };
 
 export class IngestionService {
-  constructor(private readonly repository: DurableStateRepository, private readonly config: AppConfig, private readonly now = () => new Date(), private readonly wakeup?: WorkerWakeup) {}
+  constructor(private readonly repository: DurableStateRepository, private readonly config: AppConfig, private readonly now = () => new Date(), private readonly wakeup?: WorkerWakeup, private readonly telemetry?: OperationalTelemetry) {}
 
   async accept(update: TelegramUpdate): Promise<void> {
     const telegramMessage = update.message ?? update.edited_message;
@@ -33,6 +34,14 @@ export class IngestionService {
     const seeds: BlockRunSeed[] = [];
     if (identity.text) for (const [blockIndex, block] of segmentCommandBlocks(identity.text).entries()) seeds.push({ blockIndex, store, domain: block.domain, rawBlockBody: block.body, initialStatus: "RECEIVED", decision: { status: "REQUIRES_CLARIFICATION", reasons: ["RECEIVED"] }, now: this.now() });
     const accepted = await this.repository.acceptUpdate(input, seeds);
+    for (const seed of seeds) {
+      const runId = `${accepted.updateKey}:block:${seed.blockIndex}`;
+      emitTelemetrySafely(this.telemetry, {
+        eventId: stableTelemetryEventId(runId, "tele_auto.run.received", 0),
+        type: "tele_auto.run.received", occurredAt: seed.now, runId,
+        store: seed.store, domain: seed.domain, status: "RECEIVED", severity: "INFO"
+      });
+    }
     const callback = update.callback_query?.data?.match(/^tele_auto_(confirm|clarify):(.+)$/);
     if (callback) {
       const interaction = { runId: callback[2], chatId, userId, now: this.now() };

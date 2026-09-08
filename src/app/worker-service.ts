@@ -19,14 +19,16 @@ import type { SheetsWriter } from "../sheets/sheets-writer.js";
 import { TelegramDeliveryError, type TelegramNotifier } from "../telegram/notifier.js";
 import type { AiSkuResolver } from "../parsing/ai-fallback.js";
 import { aggregateStatus } from "./status-aggregate.js";
+import { emitTelemetrySafely, stableTelemetryEventId, type OperationalTelemetry, type TeleAutoEventType } from "../observability/neo-avo-telemetry.js";
+import { AppError } from "../core/errors.js";
 
 export class WorkerService {
-  constructor(private readonly repository: DurableStateRepository, private readonly reader: SheetsReader, private readonly writer: SheetsWriter, private readonly logger: Logger, private readonly notifier?: TelegramNotifier, private readonly now = () => new Date(), private readonly leaseMs = 60000, private readonly aiResolver?: AiSkuResolver) {}
+  constructor(private readonly repository: DurableStateRepository, private readonly reader: SheetsReader, private readonly writer: SheetsWriter, private readonly logger: Logger, private readonly notifier?: TelegramNotifier, private readonly now = () => new Date(), private readonly leaseMs = 60000, private readonly aiResolver?: AiSkuResolver, private readonly telemetry?: OperationalTelemetry) {}
 
   async drain(limit: number): Promise<number> {
     const now = this.now();
     const expired = await this.repository.listExpiredExecutingRuns(now, limit);
-    for (const run of expired) await this.repository.recoverExpiredExecution(run.runId, now).catch(error => this.logger.warn("Expired execution recovery skipped", { runId: run.runId, error: String(error) }));
+    for (const run of expired) await this.repository.recoverExpiredExecution(run.runId, now).then(() => this.emitRunEvent(run, "tele_auto.worker.recovery", "WARNING", "EFFECT_UNCERTAIN")).catch(error => this.logger.warn("Expired execution recovery skipped", { runId: run.runId, error: String(error) }));
     const runs = await this.repository.listRunnableRuns(limit);
     for (const run of runs) await this.process(run).catch(error => this.logger.error("Worker run failed", error, { runId: run.runId, store: run.store, domain: run.domain }));
     return runs.length;
@@ -34,16 +36,17 @@ export class WorkerService {
 
   private async process(initial: DurableRun): Promise<void> {
     let run = initial;
-    if (run.status === "NEEDS_CLARIFICATION") { this.logger.info("Run requires clarification", { runId: run.runId, store: run.store, domain: run.domain }); await this.notifyClarification(run); return; }
+    if (run.status === "NEEDS_CLARIFICATION") { this.logger.info("Run requires clarification", { runId: run.runId, store: run.store, domain: run.domain }); this.emitRunEvent(run, "tele_auto.run.needs_clarification", "INFO", "PRE_WRITE"); await this.notifyClarification(run); return; }
     if (run.status === "RECEIVED") {
+      this.emitRunEvent(run, "tele_auto.run.processing", "INFO", "PRE_WRITE");
       await this.publishStatus(run.updateKey, "RECEIVED", "Input diterima.");
       await this.publishStatus(run.updateKey, "PROCESSING", "Input sedang diproses...\nMohon tunggu hingga proses selesai sebelum mengirim input berikutnya.");
       try { run = await this.plan(run); }
-      catch (error) { await this.repository.transitionRun(run.runId, "FAILED_RETRYABLE", run.version, error instanceof Error ? error.message : String(error)).catch(() => undefined); return; }
-      if (run.status === "NEEDS_CLARIFICATION") { await this.notifyClarification(run); return; }
-      if (run.status === "AWAITING_CONFIRMATION") { await this.publishConfirmation(run); return; }
+      catch (error) { const failed = await this.repository.transitionRun(run.runId, "FAILED_RETRYABLE", run.version, error instanceof Error ? error.message : String(error)).catch(() => undefined); if (failed) { const schemaMismatch = error instanceof AppError && error.category === "SCHEMA_MISMATCH"; this.emitRunEvent(failed, schemaMismatch ? "tele_auto.sheets.schema_mismatch" : "tele_auto.run.failed", schemaMismatch ? "ERROR" : "WARNING", "PRE_WRITE", schemaMismatch ? "SHEET_SCHEMA_MISMATCH" : "PLANNING_FAILURE"); } return; }
+      if (run.status === "NEEDS_CLARIFICATION") { this.emitRunEvent(run, "tele_auto.run.needs_clarification", "INFO", "PRE_WRITE"); await this.notifyClarification(run); return; }
+      if (run.status === "AWAITING_CONFIRMATION") { this.emitRunEvent(run, "tele_auto.run.awaiting_confirmation", "INFO", "PRE_WRITE"); await this.publishConfirmation(run); return; }
       if (run.status === "COMPLETED") { await this.notify(run); return; }
-      if (["FAILED_FINAL", "REJECTED"].includes(run.status)) { await this.publishStatus(run.updateKey, "FAILED", "Proses tidak dapat diselesaikan."); return; }
+      if (["FAILED_FINAL", "REJECTED"].includes(run.status)) { this.emitRunEvent(run, "tele_auto.run.failed", "ERROR", run.executionPhase, run.lastError); await this.publishStatus(run.updateKey, "FAILED", "Proses tidak dapat diselesaikan."); return; }
     }
     if (run.status === "READY" || run.status === "FAILED_RETRYABLE") await this.execute(run);
     else if (run.status === "EFFECT_UNCERTAIN") await this.reconcile(run);
@@ -79,29 +82,33 @@ export class WorkerService {
       for (const effect of claimed.plan.effects) {
         const current = normalizeExistingValue(await this.reader.readEffectCurrent(effect));
         if (current === effect.desiredValue) continue;
-        if (current !== effect.expectedOldValue) { await this.repository.failExecution(claimed.runId, claimed.lease!.owner, claimed.version, true, "Expected sheet value changed", this.now()); return; }
+        if (current !== effect.expectedOldValue) { const failed = await this.repository.failExecution(claimed.runId, claimed.lease!.owner, claimed.version, true, "Expected sheet value changed", this.now()); this.emitRunEvent(failed, "tele_auto.run.failed", "ERROR", "PRE_WRITE", "EXPECTED_OLD_MISMATCH"); return; }
         pending.push(effect);
       }
     } catch (error) {
       const final = error instanceof Error && error.name === "SheetsReadError" && (error as { classification?: string }).classification === "FINAL";
-      await this.repository.failExecution(claimed.runId, claimed.lease!.owner, claimed.version, final, error instanceof Error ? error.message : "Pre-write observation failed", this.now());
+      const failed = await this.repository.failExecution(claimed.runId, claimed.lease!.owner, claimed.version, final, error instanceof Error ? error.message : "Pre-write observation failed", this.now());
+      const schemaMismatch = error instanceof AppError && error.category === "SCHEMA_MISMATCH";
+      this.emitRunEvent(failed, schemaMismatch ? "tele_auto.sheets.schema_mismatch" : "tele_auto.run.failed", schemaMismatch ? "ERROR" : final ? "ERROR" : "WARNING", "PRE_WRITE", schemaMismatch ? "SHEET_SCHEMA_MISMATCH" : error instanceof Error ? error.name : "PRE_WRITE_FAILURE");
       return;
     }
-    if (!pending.length) { await this.repository.completeExecution(claimed.runId, claimed.lease!.owner, claimed.version, this.now()); return this.notify(claimed); }
+    if (!pending.length) { const completed = await this.repository.completeExecution(claimed.runId, claimed.lease!.owner, claimed.version, this.now()); return this.notify(completed); }
     let writing = await this.repository.markWriteStarted(claimed.runId, claimed.lease!.owner, claimed.version, this.now());
     try {
       await this.writer.writeEffects(pending);
       writing = await this.repository.markWriteConfirmed(writing.runId, writing.lease!.owner, writing.version, this.now());
-      await this.repository.completeExecution(writing.runId, writing.lease!.owner, writing.version, this.now());
-      await this.notify(writing);
+      const completed = await this.repository.completeExecution(writing.runId, writing.lease!.owner, writing.version, this.now());
+      await this.notify(completed);
     } catch (error) {
       const sheetsError = error instanceof Error && error.name === "SheetsWriteError" ? error as Error & { classification?: string; externalMutationOccurred?: boolean } : undefined;
       if (sheetsError && !sheetsError.externalMutationOccurred && sheetsError.classification !== "UNCERTAIN") {
         const classification = sheetsError.classification;
-        await this.repository.failExecution(writing.runId, writing.lease!.owner, writing.version, classification === "FINAL", sheetsError.message, this.now());
+        const failed = await this.repository.failExecution(writing.runId, writing.lease!.owner, writing.version, classification === "FINAL", sheetsError.message, this.now());
+        this.emitRunEvent(failed, "tele_auto.run.failed", classification === "FINAL" ? "ERROR" : "WARNING", "WRITE_STARTED", sheetsError.name);
         await this.publishStatus(writing.updateKey, "FAILED", "Proses tidak dapat diselesaikan.");
       } else {
-        await this.repository.markEffectUncertain(writing.runId, writing.lease!.owner, writing.version, this.now()).catch(() => undefined);
+        const uncertain = await this.repository.markEffectUncertain(writing.runId, writing.lease!.owner, writing.version, this.now()).catch(() => undefined);
+        this.emitRunEvent(uncertain ?? writing, "tele_auto.run.effect_uncertain", "ERROR", "WRITE_STARTED", "EFFECT_UNCERTAIN");
       }
     }
   }
@@ -121,7 +128,7 @@ export class WorkerService {
       current = await this.repository.persistReconciliation({ runId: current.runId, expectedVersion: current.version, outcomes, owner: current.lease!.owner, now: this.now() });
     }
     if (current.effectRecovery?.some(item => item.outcome === "DO_NOT_OVERWRITE")) return;
-    if ((current.residualEffectIds ?? []).length === 0) { await this.repository.completeReconciledRun(current.runId, current.version); return; }
+    if ((current.residualEffectIds ?? []).length === 0) { const completed = await this.repository.completeReconciledRun(current.runId, current.version); this.emitRunEvent(completed, "tele_auto.run.completed", "INFO", "WRITE_CONFIRMED"); return; }
     const claim = await this.repository.claimExecution(current.runId, `worker-${process.pid}`, this.now(), this.leaseMs);
     if (claim.status !== "CLAIMED" || !claim.run.plan || !claim.run.lease) return;
     const residual = residualEffects(claim.run);
@@ -135,7 +142,8 @@ export class WorkerService {
       const executing = await this.repository.markEffectUncertain(claim.run.runId, claim.run.lease.owner, claim.run.version, this.now());
       const outcomes = (executing.plan?.effects ?? []).map(effect => ({ effectId: effectIdentity(effect), outcome: "ALREADY_APPLIED" as const, reconciledAt: this.now().toISOString() }));
       const reconciled = await this.repository.persistReconciliation({ runId: executing.runId, expectedVersion: executing.version, outcomes, owner: claim.run.lease.owner, now: this.now() });
-      await this.repository.completeReconciledRun(reconciled.runId, reconciled.version);
+      const completed = await this.repository.completeReconciledRun(reconciled.runId, reconciled.version);
+      this.emitRunEvent(completed, "tele_auto.run.completed", "INFO", "WRITE_CONFIRMED");
     } catch { await this.repository.markEffectUncertain(claim.run.runId, claim.run.lease.owner, claim.run.version, this.now()).catch(() => undefined); }
   }
 
@@ -148,6 +156,7 @@ export class WorkerService {
   }
 
   private async notify(run: DurableRun): Promise<void> {
+    this.emitRunEvent(run, "tele_auto.run.completed", "INFO", run.executionPhase ?? "WRITE_CONFIRMED");
     await this.publishStatus(run.updateKey, "SUCCESS", "Berhasil diproses.\nAnda dapat mengirim input berikutnya.");
   }
 
@@ -160,6 +169,7 @@ export class WorkerService {
     try {
       const delivery = await this.publishStatus(run.updateKey, "NEEDS_INFORMATION", `Perlu informasi tambahan.\n\nData ${run.domain === "PRODUCTION" ? "produksi" : run.domain === "WASTE" ? "waste" : "Daily SO"} untuk ${date} belum diisi.\nKirim SKU dan quantity yang ingin dicatat.\n\nSelesaikan input ini terlebih dahulu sebelum mengirim data berikutnya.`);
       if (!delivery.ok) {
+        this.emitTelemetry("tele_auto.telegram.delivery_failed", "WARNING", run, "TELEGRAM_DELIVERY_FAILED");
         await this.repository.recordClarificationDelivery(run.runId, claim.run.version, delivery.classification === "RETRYABLE" ? "FAILED_RETRYABLE" : "FAILED_FINAL", this.now(), "Telegram clarification delivery failed");
         return;
       }
@@ -168,6 +178,7 @@ export class WorkerService {
     } catch (error) {
       const classification = error instanceof TelegramDeliveryError && error.classification === "RETRYABLE" ? "RETRYABLE" : "FINAL";
       await this.repository.recordClarificationDelivery(run.runId, claim.run.version, classification === "FINAL" ? "FAILED_FINAL" : "FAILED_RETRYABLE", this.now(), "Telegram clarification delivery failed").catch(recordError => this.logger.warn("Clarification delivery result could not be persisted", { runId: run.runId, error: String(recordError) }));
+      this.emitTelemetry("tele_auto.telegram.delivery_failed", "WARNING", run, "TELEGRAM_DELIVERY_FAILED");
       this.logger.warn("Clarification delivery failed", { runId: run.runId, store: run.store, domain: run.domain, classification });
     }
   }
@@ -213,7 +224,25 @@ export class WorkerService {
       }
       await this.repository.recordPrimaryStatus(updateKey, claimed.version, state, aggregate.fingerprint, "FAILED", this.now()).catch(recordError => this.logger.warn("Primary status result could not be persisted", { updateKey, error: String(recordError) }));
       this.logger.warn("Primary status delivery failed", { updateKey, state, error: String(error) });
+      this.emitTelemetry("tele_auto.telegram.delivery_failed", "WARNING", undefined, "TELEGRAM_DELIVERY_FAILED", updateKey);
       return { ok: false, classification: error instanceof TelegramDeliveryError && error.classification === "RETRYABLE" ? "RETRYABLE" : "FINAL" };
     }
+  }
+
+  private emitRunEvent(run: DurableRun, type: TeleAutoEventType, severity: "INFO" | "WARNING" | "ERROR" | "CRITICAL", phase?: string, errorCode?: string): void {
+    this.emitTelemetry(type, severity, run, phase, undefined, errorCode);
+  }
+
+  private emitTelemetry(type: TeleAutoEventType, severity: "INFO" | "WARNING" | "ERROR" | "CRITICAL", run?: DurableRun, phase?: string, subjectId?: string, errorCode?: string): void {
+    const subject = run?.runId ?? subjectId ?? "runtime";
+    emitTelemetrySafely(this.telemetry, {
+      eventId: stableTelemetryEventId(subject, type, run?.version ?? 0),
+      type,
+      occurredAt: this.now(),
+      ...(run ? { runId: run.runId, store: run.store, domain: run.domain, status: run.status } : {}),
+      severity,
+      ...(phase ? { executionPhase: phase } : {}),
+      ...(errorCode ? { errorCode } : {})
+    }, this.logger);
   }
 }

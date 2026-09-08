@@ -25,4 +25,11 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ NODE_ENV: "production" })).toThrow("WORKER_AUTH_TOKEN");
     expect(loadConfig({ NODE_ENV: "production", WORKER_AUTH_TOKEN: "secret" }).workerAuthToken).toBe("secret");
   });
+
+  it("requires complete Neo AVO configuration when telemetry is enabled", () => {
+    expect(() => loadConfig({ NODE_ENV: "production", WORKER_AUTH_TOKEN: "worker", NEO_AVO_ENABLED: "true" })).toThrow("NEO_AVO_BASE_URL");
+    expect(loadConfig({ NODE_ENV: "production", WORKER_AUTH_TOKEN: "worker", NEO_AVO_ENABLED: "true", NEO_AVO_BASE_URL: "https://neo.example", NEO_AVO_API_TOKEN: "project-token" })).toMatchObject({
+      neoAvoEnabled: true, neoAvoBaseUrl: "https://neo.example", neoAvoProjectId: "tele-auto", neoAvoEnvironment: "production"
+    });
+  });
 });

@@ -53,6 +53,12 @@ Cloud Run target region is `asia-southeast2`. `Dockerfile.v2` runs `start:v2`, s
 
 M6.1 adds `VertexAiSkuResolver` as a narrow parser fallback. It uses `@google/genai` Vertex mode with ADC, project `tele-auto-v2-prod`, location `global`, and model `gemini-3.1-flash-lite`. Worker parsing injects this resolver; deterministic parser outcomes never invoke it. Requests contain only domain, normalized term, and bounded candidate IDs. Structured JSON, candidate validation, and a bounded abort timeout preserve parser safety. Vertex does not own store, date, quantity, workbook, coordinates, or mutation authority.
 
+## Neo AVO telemetry boundary
+
+Tele Auto emits bounded operational events to the generic Neo AVO `POST /api/v1/events` endpoint through `src/observability/neo-avo-telemetry.ts`. The adapter uses a dedicated `NEO_AVO_API_TOKEN`, the canonical project identity `tele-auto`, and an explicit production environment. Event IDs are deterministic from the run/update subject, event type, and durable version so repeated worker delivery is idempotent at the receiving project.
+
+Telemetry is disabled unless `NEO_AVO_ENABLED=true`. When enabled, configuration requires an explicit base URL and project credential; requests have a bounded timeout and contain only normalized lifecycle metadata. Provider errors are logged as sanitized operational warnings and never affect Telegram acceptance, parsing, Sheets mutation, durable completion, retry, or recovery. No raw Telegram input, spreadsheet values, SKU/quantity data, or credentials are emitted. Neo AVO is observe-first; it has no mutation or command authority.
+
 ## Dependency rules
 
 Dependencies point inward: runtime/adapters may depend on application and core; application may depend on core ports; core must not import Telegraf, Google SDKs, Firestore, Express, or Neo AVO. Telegram, parsing, Sheets, and persistence remain separate concerns. Parser code must not own sheet coordinates.
