@@ -10,6 +10,11 @@ export type AiSkuResolver = {
     readonly domain: DomainId;
     readonly normalizedTerm: string;
     readonly candidates: readonly CanonicalSkuId[];
+    readonly candidateContext?: readonly {
+      readonly canonicalSkuId: CanonicalSkuId;
+      readonly canonicalName: string;
+      readonly aliases: readonly string[];
+    }[];
   }): Promise<AiSkuResponse>;
 };
 

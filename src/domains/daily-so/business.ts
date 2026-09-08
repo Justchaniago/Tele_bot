@@ -31,6 +31,7 @@ export function planDailySo(input: BusinessPlanningInput): BusinessPlanResult {
 
   const resolved = resolveBusinessItems(input.block, input.store, domain, input.targets, input.quantityAssessments);
   if (resolved.clarificationReasons.length > 0) return clarificationResult(resolved.clarificationReasons);
+  if (resolved.items.length === 0 && resolved.skippedItems.length > 0) return clarificationResult(["NO_RECOGNIZED_SKU"]);
 
   const observed = new Map<string, ExistingBusinessValue>();
   for (const sku of schemaSkus) {
@@ -56,7 +57,7 @@ export function planDailySo(input: BusinessPlanningInput): BusinessPlanResult {
         provenance: item ? "USER_EXPLICIT" : "AUTO_FILL_MISSING"
       };
     });
-    return resultFromPlan(buildPlan(input.store, domain, date, effects, [], [], true));
+    return resultFromPlan(buildPlan(input.store, domain, date, effects, [], [], true, resolved.skippedItems));
   }
 
   if ([...observed.values()].some(value => value === null)) {
@@ -75,7 +76,7 @@ export function planDailySo(input: BusinessPlanningInput): BusinessPlanResult {
     effects.push({ store: input.store, domain, date, canonicalSkuId: item.canonicalSkuId, target: item.target, expectedOldValue: existing, desiredValue: item.quantity, operation: "SET", provenance: "USER_EXPLICIT" });
     corrections.push({ store: input.store, domain, date, canonicalSkuId: item.canonicalSkuId, target: item.target, oldValue: existing, proposedValue: item.quantity, operation: "SET" });
   }
-  return resultFromPlan(buildPlan(input.store, domain, date, effects, noOps, corrections, corrections.length === 0));
+  return resultFromPlan(buildPlan(input.store, domain, date, effects, noOps, corrections, corrections.length === 0, resolved.skippedItems));
 }
 
 export const DAILY_SO_TARGET_COUNT = Object.keys(DAILY_SO_SCHEMAS.PMS).length;

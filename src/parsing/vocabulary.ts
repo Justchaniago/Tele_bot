@@ -44,16 +44,16 @@ const productionWaste: readonly [ProductionWasteSkuId, string, readonly string[]
 ];
 
 const dailySo: readonly [DailySoSkuId, string, readonly string[]][] = [
-  ["Y16_G1_MEDIUM_CUP", "GONG CHA Y16 CUPS-G1 (MEDIUM)", ["medium", "medium g1", "g1 medium"]],
-  ["Y22_G1_LARGE_CUP", "GONG CHA Y22 CUPS-G1 (LARGE)", ["large g1", "g1 large", "large", "cupl"]],
-  ["Y12_G1_SMALL_CUP", "GONG CHA Y12 CUPS-G1 (SMALL)", ["small g1", "g1 small", "small", "cups"]],
-  ["PAPER_CUP_16OZ", "GONG CHA PAPER CUP - 16OZ", ["paper cup", "cuph"]],
-  ["RAISED_COVER", "RAISED COVER", ["domlid"]],
+  ["Y16_G1_MEDIUM_CUP", "GONG CHA Y16 CUPS-G1 (MEDIUM)", ["medium", "medium g1", "g1 medium", "cup m", "cup m logo", "cup medium logo"]],
+  ["Y22_G1_LARGE_CUP", "GONG CHA Y22 CUPS-G1 (LARGE)", ["large g1", "g1 large", "large", "cupl", "cup l", "cup l logo", "cup large logo"]],
+  ["Y12_G1_SMALL_CUP", "GONG CHA Y12 CUPS-G1 (SMALL)", ["small g1", "g1 small", "small", "cups", "cup small", "cup s"]],
+  ["PAPER_CUP_16OZ", "GONG CHA PAPER CUP - 16OZ", ["paper cup", "paper cup hot", "cuph"]],
+  ["RAISED_COVER", "RAISED COVER", ["domlid", "dome lid", "dome lide"]],
   ["PAPER_CUP_LID", "GONG CHA PAPER CUP LID", ["paper cup lid", "hotlid"]],
   ["MILLAC_GOLD_1LT", "WHIP CREAM - MILLAC GOLD 1LT", ["millac"]],
   ["FRESH_MILK_DIAMOND_946ML", "FRESH MILK -  PLAIN DIAMOND 946ML", ["freshmilk", "fresh milk", "fm", "susu", "diamond", "plain diamond"]],
-  ["Y16_LOCAL_MEDIUM_CUP", "GONG CHA Y16 CUPS LOCAL (MEDIUM)", ["medium", "medium local", "local medium", "medium lokal", "lokal medium"]],
-  ["HARRY_POTTER_CUP", "HARRY POTTER CUP", ["harry potter"]]
+  ["Y16_LOCAL_MEDIUM_CUP", "GONG CHA Y16 CUPS LOCAL (MEDIUM)", ["medium", "medium local", "local medium", "medium lokal", "lokal medium", "cup m polos", "cup m local", "cup m lokal", "medium polos"]],
+  ["HARRY_POTTER_CUP", "HARRY POTTER CUP", ["harry potter", "cup harry potter"]]
 ];
 
 const familyMetadata: Partial<Record<CanonicalSkuId, { readonly family: string; readonly qualifiers: readonly string[] }>> = {

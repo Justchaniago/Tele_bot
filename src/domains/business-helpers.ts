@@ -16,7 +16,8 @@ import type {
   MutationPlan,
   NoOpEffect,
   QuantityAssessment,
-  ResolvedBusinessItem
+  ResolvedBusinessItem,
+  SkippedSku
 } from "./business-types.js";
 
 export function normalizeExistingValue(value: unknown): ExistingBusinessValue {
@@ -71,9 +72,10 @@ export function resolveBusinessItems(
   domain: DomainId,
   targets: Readonly<Record<string, SheetWriteTarget>>,
   assessments?: Readonly<Record<number, QuantityAssessment>>
-): { items: readonly ResolvedBusinessItem[]; clarificationReasons: readonly string[] } {
+): { items: readonly ResolvedBusinessItem[]; skippedItems: readonly SkippedSku[]; clarificationReasons: readonly string[] } {
   const reasons: string[] = [];
-  if (block.status !== "PARSE_READY") reasons.push(...block.clarificationReasons);
+  const skippedItems: SkippedSku[] = [];
+  if (block.status !== "PARSE_READY") reasons.push(...block.clarificationReasons.filter(reason => reason !== "UNKNOWN_SKU" && reason !== "AMBIGUOUS_SKU"));
   if (block.domain !== domain) reasons.push("DOMAIN_MISMATCH");
   if (!block.normalizedDate) reasons.push("MISSING_DATE");
   if (block.temporalClassification === "INVALID") reasons.push("INVALID_DATE");
@@ -82,7 +84,9 @@ export function resolveBusinessItems(
   const seen = new Set<CanonicalSkuId>();
   block.items.forEach((item, index) => {
     if (item.status !== "RESOLVED" || !item.canonicalSkuId) {
-      reasons.push(item.status);
+      if (item.status === "UNKNOWN" || item.status === "AMBIGUOUS" || item.status === "IGNORED") {
+        skippedItems.push({ rawTerm: item.rawTerm, reason: item.status === "UNKNOWN" ? "UNKNOWN_SKU" : item.status === "AMBIGUOUS" ? "AMBIGUOUS_SKU" : "IGNORED_SKU", ...(item.status === "AMBIGUOUS" ? { candidates: item.candidates } : {}) });
+      } else reasons.push(item.status);
       return;
     }
     if (seen.has(item.canonicalSkuId)) {
@@ -115,7 +119,7 @@ export function resolveBusinessItems(
       target
     });
   });
-  return { items, clarificationReasons: [...new Set(reasons)] };
+  return { items, skippedItems, clarificationReasons: [...new Set(reasons)] };
 }
 
 export function operationFor(value: ExistingBusinessValue): MutationOperation {
@@ -129,7 +133,8 @@ export function buildPlan(
   effects: readonly MutationEffect[],
   noOps: readonly NoOpEffect[],
   corrections: readonly CorrectionRequest[],
-  executable: boolean
+  executable: boolean,
+  skippedItems: readonly SkippedSku[] = []
 ): MutationPlan {
   return Object.freeze({
     store,
@@ -138,6 +143,7 @@ export function buildPlan(
     effects: Object.freeze([...effects]),
     noOps: Object.freeze([...noOps]),
     corrections: Object.freeze([...corrections]),
+    skippedItems: Object.freeze([...skippedItems]),
     executable
   });
 }
@@ -181,6 +187,7 @@ export function planProductionWaste(
   const resolved = resolveBusinessItems(input.block, input.store, domain, input.targets, input.quantityAssessments);
   const reasons = date ? resolved.clarificationReasons : [...resolved.clarificationReasons, "MISSING_DATE"];
   if (reasons.length > 0) return clarificationResult(reasons);
+  if (resolved.items.length === 0 && resolved.skippedItems.length > 0) return clarificationResult(["NO_RECOGNIZED_SKU"]);
 
   const effects: MutationEffect[] = [];
   const noOps: NoOpEffect[] = [];
@@ -206,7 +213,7 @@ export function planProductionWaste(
       corrections.push({ store: input.store, domain, date: date!, canonicalSkuId: item.canonicalSkuId, target: item.target, oldValue: existing, proposedValue: desiredValue, operation });
     }
   }
-  return resultFromPlan(buildPlan(input.store, domain, date!, effects, noOps, corrections, corrections.length === 0));
+  return resultFromPlan(buildPlan(input.store, domain, date!, effects, noOps, corrections, corrections.length === 0, resolved.skippedItems));
 }
 
 export function expectedTargetSkus(store: StoreId): readonly CanonicalSkuId[] {

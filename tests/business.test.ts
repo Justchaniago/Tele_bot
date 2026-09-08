@@ -83,6 +83,18 @@ describe("Production and Waste business semantics", () => {
     expect(planWaste(pwInput(wasteAboveThreshold, "WASTE", { PEARL_BASE: null })).status).toBe("READY");
   });
 
+  it("skips unresolved SKU lines while retaining valid Production effects", async () => {
+    const parsed = await block("PRODUCTION", `${date}\npearl 2\nnot a real sku 7`);
+    const result = planProduction(pwInput(parsed, "PRODUCTION", { PEARL_BASE: null }));
+
+    expect(result.status).toBe("READY");
+    if (result.status === "READY") {
+      expect(result.plan.effects).toHaveLength(1);
+      expect(result.plan.effects[0].canonicalSkuId).toBe("PEARL_BASE");
+      expect(result.plan.skippedItems).toEqual([{ rawTerm: "not a real sku", reason: "UNKNOWN_SKU" }]);
+    }
+  });
+
   it("holds whole mixed block when one line needs correction", async () => {
     const parsed = await block("PRODUCTION", `${date}\npearl 3\nhoney base 3`);
     const result = planProduction(pwInput(parsed, "PRODUCTION", { PEARL_BASE: null, HONEY_BASE: 2 }, ["PEARL_BASE", "HONEY_BASE"]));

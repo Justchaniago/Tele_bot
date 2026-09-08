@@ -10,7 +10,7 @@ export type VertexAiSkuResolverConfig = {
   readonly timeoutMs: number;
 };
 
-type VertexModelClient = { readonly models: { readonly generateContent: (input: { readonly model: string; readonly contents: string; readonly config: { readonly temperature: number; readonly candidateCount: number; readonly maxOutputTokens: number; readonly responseMimeType: string; readonly responseJsonSchema: unknown; readonly abortSignal: AbortSignal } }) => Promise<GenerateContentResponse> } };
+  type VertexModelClient = { readonly models: { readonly generateContent: (input: { readonly model: string; readonly contents: string; readonly config: { readonly temperature: number; readonly candidateCount: number; readonly maxOutputTokens: number; readonly responseMimeType: string; readonly responseJsonSchema: unknown; readonly abortSignal: AbortSignal } }) => Promise<GenerateContentResponse> } };
 
 const responseSchema = {
   type: "object",
@@ -29,7 +29,7 @@ export class VertexAiSkuResolver implements AiSkuResolver {
     if (!Number.isFinite(config.timeoutMs) || config.timeoutMs <= 0) throw new Error("Vertex AI timeout must be positive");
   }
 
-  async resolve(input: { readonly domain: DomainId; readonly normalizedTerm: string; readonly candidates: readonly CanonicalSkuId[] }): Promise<AiSkuResponse> {
+  async resolve(input: { readonly domain: DomainId; readonly normalizedTerm: string; readonly candidates: readonly CanonicalSkuId[]; readonly candidateContext?: readonly { readonly canonicalSkuId: CanonicalSkuId; readonly canonicalName: string; readonly aliases: readonly string[] }[] }): Promise<AiSkuResponse> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);
     try {
@@ -39,7 +39,7 @@ export class VertexAiSkuResolver implements AiSkuResolver {
           "Resolve one residual SKU term. Do not infer missing qualifiers. Return JSON only.",
           `domain=${input.domain}`,
           `term=${input.normalizedTerm}`,
-          `candidates=${JSON.stringify(input.candidates)}`,
+          `candidates=${JSON.stringify(input.candidateContext ?? input.candidates)}`,
           "Return RESOLVED only when exactly one candidate is clearly supported; otherwise AMBIGUOUS or UNKNOWN."
         ].join("\n"),
         config: { temperature: 0, candidateCount: 1, maxOutputTokens: 64, responseMimeType: "application/json", responseJsonSchema: responseSchema, abortSignal: controller.signal }

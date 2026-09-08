@@ -52,6 +52,12 @@ export type CorrectionRequest = {
   readonly operation: MutationOperation;
 };
 
+export type SkippedSku = {
+  readonly rawTerm: string;
+  readonly reason: "UNKNOWN_SKU" | "AMBIGUOUS_SKU" | "IGNORED_SKU";
+  readonly candidates?: readonly CanonicalSkuId[];
+};
+
 export type MutationPlan = {
   readonly store: StoreId;
   readonly domain: DomainId;
@@ -59,6 +65,7 @@ export type MutationPlan = {
   readonly effects: readonly MutationEffect[];
   readonly noOps: readonly NoOpEffect[];
   readonly corrections: readonly CorrectionRequest[];
+  readonly skippedItems?: readonly SkippedSku[];
   readonly executable: boolean;
 };
 

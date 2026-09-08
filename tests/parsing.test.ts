@@ -68,6 +68,19 @@ describe("commands and normalization", () => {
     ]);
   });
 
+  it("ignores the unsupported Daily SO cup L polos line without invoking AI", async () => {
+    const resolve = vi.fn();
+    const result = await parseCommandBlock({
+      domain: "DAILY_SO",
+      body: "07.09.2026\ncup L polos : 0\nlarge 1926"
+    }, { now, aiResolver: { resolve } });
+
+    expect(result.status).toBe("PARSE_READY");
+    expect(result.items[0]).toMatchObject({ rawTerm: "cup L polos :", status: "IGNORED" });
+    expect(result.items[1]).toMatchObject({ canonicalSkuId: "Y22_G1_LARGE_CUP", status: "RESOLVED" });
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
   it("segments independent command blocks and retains empty context", async () => {
     const result = await parseCommandMessage(
       "/produksi\n07-09-2026\npearl 4\n\n/waste\n07-09-2026\nunknown 1\n\n/dailyso\n",

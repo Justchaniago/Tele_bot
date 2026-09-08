@@ -27,7 +27,7 @@ export type ParsedItem = {
   readonly quantityValue?: number;
   readonly resolver?: "EXACT_CANONICAL" | "EXACT_ALIAS" | "FUZZY" | "AI_FALLBACK";
   readonly confidence?: number;
-  readonly status: "RESOLVED" | "AMBIGUOUS" | "UNKNOWN" | "NEEDS_CLARIFICATION" | "MALFORMED_QUANTITY";
+  readonly status: "RESOLVED" | "AMBIGUOUS" | "UNKNOWN" | "IGNORED" | "NEEDS_CLARIFICATION" | "MALFORMED_QUANTITY";
   readonly candidates?: readonly CanonicalSkuId[];
 };
 
@@ -148,19 +148,39 @@ async function resolveTerm(
   domain: DomainId,
   aiResolver?: AiSkuResolver
 ): Promise<ParsedItem> {
+  if (domain === "DAILY_SO" && normalizeText(rawTerm) === "cup l polos") {
+    return {
+      rawLine,
+      rawTerm,
+      normalizedTerm: normalizeText(rawTerm),
+      ...(quantity.quantityToken
+        ? { quantityToken: quantity.quantityToken, quantityValue: quantity.quantityValue }
+        : quantity.malformedQuantity ? { quantityToken: quantity.malformedQuantity } : {}),
+      status: "IGNORED"
+    };
+  }
   const local = resolveSku(rawTerm, domain);
   if (!aiResolver || (local.status !== "UNKNOWN" && local.status !== "AMBIGUOUS")) {
     return resolutionToItem(rawLine, rawTerm, quantity, local);
   }
 
+  const domainCandidates = candidatesForDomain(domain);
   const candidates = local.status === "AMBIGUOUS"
     ? local.candidates
-    : candidatesForDomain(domain).map(entry => entry.canonicalSkuId);
+    : domainCandidates.map(entry => entry.canonicalSkuId);
+  const candidateContext = domainCandidates
+    .filter(entry => candidates.includes(entry.canonicalSkuId))
+    .map(entry => ({
+      canonicalSkuId: entry.canonicalSkuId,
+      canonicalName: entry.canonicalName,
+      aliases: entry.aliases
+    }));
   try {
     const aiResult = validateAiSkuResponse(await aiResolver.resolve({
       domain,
       normalizedTerm: normalizeText(rawTerm),
-      candidates
+      candidates,
+      candidateContext
     }), candidates);
     if (aiResult.status === "RESOLVED") {
       const item = resolutionToItem(rawLine, rawTerm, quantity, {

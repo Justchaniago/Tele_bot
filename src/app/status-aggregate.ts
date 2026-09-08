@@ -42,6 +42,11 @@ function detail(run: DurableRun): string {
   return "";
 }
 
+function skippedDetail(runs: readonly DurableRun[]): string {
+  const terms = runs.flatMap(run => run.plan?.skippedItems?.map(item => item.rawTerm.trim()).filter(Boolean) ?? []);
+  return terms.length ? `\nSKU yang dilewati karena tidak dikenali: ${terms.join(", ")}` : "";
+}
+
 export function aggregateStatus(runs: readonly DurableRun[], displayHint?: PrimaryStatusState): AggregateStatus {
   const ordered = [...runs].sort((a, b) => a.blockIndex - b.blockIndex);
   if (!ordered.length) return { state: "FAILED", fingerprint: "empty", text: "Proses tidak dapat diselesaikan." };
@@ -62,12 +67,12 @@ export function aggregateStatus(runs: readonly DurableRun[], displayHint?: Prima
     if (state === "NEEDS_INFORMATION") return { state, fingerprint, text: `Perlu informasi tambahan.\n\n${detail(run)}\n\nSelesaikan input ini terlebih dahulu sebelum mengirim data berikutnya.` };
     if (state === "NEEDS_CONFIRMATION") return { state, fingerprint, text: `Perlu konfirmasi perubahan.\n${detail(run)}\n\nSelesaikan input ini terlebih dahulu sebelum mengirim data berikutnya.` };
     if (state === "PROCESSING") return { state, fingerprint, text: "Input sedang diproses...\nMohon tunggu hingga proses selesai sebelum mengirim input berikutnya." };
-    if (state === "SUCCESS") return { state, fingerprint, text: "Berhasil diproses.\nAnda dapat mengirim input berikutnya." };
+    if (state === "SUCCESS") return { state, fingerprint, text: `Berhasil diproses.${skippedDetail(ordered)}\nAnda dapat mengirim input berikutnya.` };
     return { state: "FAILED", fingerprint, text: "Proses tidak dapat diselesaikan.\nAnda dapat mengirim input berikutnya." };
   }
   const summary = ordered.map(run => `${label(run.domain)}: ${childState(run)}`).join("\n");
   const actionable = ordered.filter(run => run.status === "NEEDS_CLARIFICATION" || run.status === "AWAITING_CONFIRMATION").map(detail).filter(Boolean).join("\n\n");
   const intro = state === "NEEDS_INFORMATION" ? "Perlu informasi tambahan." : state === "NEEDS_CONFIRMATION" ? "Perlu konfirmasi perubahan." : state === "PROCESSING" ? "Input sedang diproses..." : state === "SUCCESS" ? "Proses selesai." : "Proses tidak dapat diselesaikan.";
   const footer = state === "PROCESSING" ? "Mohon tunggu hingga proses selesai sebelum mengirim input berikutnya." : state === "NEEDS_INFORMATION" || state === "NEEDS_CONFIRMATION" ? "Selesaikan input ini terlebih dahulu sebelum mengirim data berikutnya." : "Anda dapat mengirim input berikutnya.";
-  return { state, fingerprint, text: `${intro}\n\n${summary}${actionable ? `\n\n${actionable}` : ""}\n\n${footer}` };
+  return { state, fingerprint, text: `${intro}\n\n${summary}${actionable ? `\n\n${actionable}` : ""}${state === "SUCCESS" ? skippedDetail(ordered) : ""}\n\n${footer}` };
 }
