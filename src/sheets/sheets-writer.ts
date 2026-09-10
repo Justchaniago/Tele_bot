@@ -37,7 +37,8 @@ export class SheetsWriter {
         externalMutationOccurred = true;
       }
     } catch (error) {
-      throw new SheetsWriteError(externalMutationOccurred ? "UNCERTAIN" : writeClassification(error), "Google Sheets mutation failed", externalMutationOccurred, { cause: error as Error });
+      const causeMsg = error instanceof Error ? error.message : String(error);
+      throw new SheetsWriteError(externalMutationOccurred ? "UNCERTAIN" : writeClassification(error), `Google Sheets mutation failed: ${causeMsg}`, externalMutationOccurred, { cause: error as Error });
     }
   }
 }

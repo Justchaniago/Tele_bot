@@ -15,7 +15,7 @@ export type TelegramUpdate = {
   readonly update_id: number;
   readonly message?: TelegramMessage;
   readonly edited_message?: TelegramMessage;
-  readonly callback_query?: { readonly id?: string; readonly from?: { readonly id?: number | string }; readonly message?: { readonly chat?: { readonly id?: number | string } }; readonly data?: string };
+  readonly callback_query?: { readonly id?: string; readonly from?: { readonly id?: number | string }; readonly message?: { readonly message_id?: number; readonly chat?: { readonly id?: number | string } }; readonly data?: string };
 };
 
 export class IngestionService {
@@ -25,7 +25,7 @@ export class IngestionService {
     const telegramMessage = update.message ?? update.edited_message;
     const identity = telegramMessage
       ? { chat: telegramMessage.chat?.id, user: telegramMessage.from?.id, message: telegramMessage.message_id, text: telegramMessage.text }
-      : { chat: update.callback_query?.message?.chat?.id, user: update.callback_query?.from?.id, message: undefined, text: undefined };
+      : { chat: update.callback_query?.message?.chat?.id, user: update.callback_query?.from?.id, message: update.callback_query?.message?.message_id, text: undefined };
     if (identity.chat === undefined || identity.user === undefined) throw new WebhookInputError("Telegram update lacks trusted chat/user identity");
     const chatId = String(identity.chat); const userId = String(identity.user);
     const store = this.config.trustedTelegramChats?.[chatId];
