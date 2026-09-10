@@ -5,8 +5,9 @@ steps:
       - '-f'
       - 'Dockerfile.v2'
       - '-t'
-      - 'asia-southeast2-docker.pkg.dev/tele-auto-v2-prod/tele-auto-v2/tele-auto-v2:latest'
+      - 'asia-southeast2-docker.pkg.dev/cluster-01-core-prod/tele-auto-v2/tele-auto-v2:latest'
       - '.'
 
 images:
-  - 'asia-southeast2-docker.pkg.dev/tele-auto-v2-prod/tele-auto-v2/tele-auto-v2:latest'
+  - 'asia-southeast2-docker.pkg.dev/cluster-01-core-prod/tele-auto-v2/tele-auto-v2:latest'
+

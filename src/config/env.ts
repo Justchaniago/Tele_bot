@@ -1,9 +1,9 @@
 export type NodeEnvironment = "development" | "test" | "production";
 export type LogLevel = "debug" | "info" | "warn" | "error";
-export const V2_GCP_PROJECT_ID = "tele-auto-v2-prod" as const;
+export const V2_GCP_PROJECT_ID = "cluster-01-core-prod" as const;
 export const V2_FIRESTORE_DATABASE_ID = "(default)" as const;
 export const V2_FIRESTORE_LOCATION = "asia-southeast2" as const;
-export const V2_RUNTIME_SERVICE_ACCOUNT = "tele-auto-runtime@tele-auto-v2-prod.iam.gserviceaccount.com" as const;
+export const V2_RUNTIME_SERVICE_ACCOUNT = "tele-auto-runtime@cluster-01-core-prod.iam.gserviceaccount.com" as const;
 export const V2_VERTEX_AI_LOCATION = "global" as const;
 export const V2_VERTEX_AI_MODEL = "gemini-3.1-flash-lite" as const;
 export const NEO_AVO_PROJECT_ID = "tele-auto" as const;

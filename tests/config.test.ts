@@ -18,7 +18,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects legacy Firestore project configuration", () => {
-    expect(() => loadConfig({ GCP_PROJECT_ID: "legacy-project" })).toThrow("tele-auto-v2-prod");
+    expect(() => loadConfig({ GCP_PROJECT_ID: "legacy-project" })).toThrow("cluster-01-core-prod");
   });
 
   it("requires worker token for production Cloud Tasks wakeup", () => {

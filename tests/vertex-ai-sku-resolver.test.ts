@@ -10,7 +10,7 @@ function fakeVertex(response: unknown, calls: { count: number; request?: unknown
   } as { calls: { count: number; request?: unknown }; client: ConstructorParameters<typeof VertexAiSkuResolver>[1] };
 }
 
-const baseConfig = { projectId: "tele-auto-v2-prod", location: "global", model: "gemini-3.1-flash-lite", timeoutMs: 100 };
+const baseConfig = { projectId: "cluster-01-core-prod", location: "global", model: "gemini-3.1-flash-lite", timeoutMs: 100 };
 
 describe("VertexAiSkuResolver", () => {
   it("accepts only an allowed candidate from structured JSON", async () => {

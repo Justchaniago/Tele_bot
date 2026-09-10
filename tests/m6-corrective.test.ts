@@ -63,7 +63,7 @@ describe("M6 corrective contracts", () => {
   it("enqueues only a minimal durable wakeup payload", async () => {
     const calls: unknown[] = [];
     const client = { queuePath: () => "projects/p/locations/asia-southeast2/queues/q", createTask: async (request: unknown) => { calls.push(request); } };
-    await new CloudTasksWorkerWakeup(client, { projectId: "tele-auto-v2-prod", location: "asia-southeast2", queue: "q", targetUrl: "https://worker", serviceAccountEmail: "runtime@example.com", workerAuthToken: "worker-secret" }).enqueue("bot:7");
+    await new CloudTasksWorkerWakeup(client, { projectId: "cluster-01-core-prod", location: "asia-southeast2", queue: "q", targetUrl: "https://worker", serviceAccountEmail: "runtime@example.com", workerAuthToken: "worker-secret" }).enqueue("bot:7");
     expect(calls).toHaveLength(1);
     const request = calls[0] as { task: { httpRequest: { body: string; headers: Record<string, string>; oidcToken: { serviceAccountEmail: string; audience: string } } } };
     expect(JSON.parse(Buffer.from(request.task.httpRequest.body, "base64").toString())).toEqual({ updateKey: "bot:7" });
@@ -74,7 +74,7 @@ describe("M6 corrective contracts", () => {
   it("generated Cloud Task request passes real worker handler authentication", async () => {
     let task: { task: { httpRequest: { headers: Record<string, string> } } } | undefined;
     const client = { queuePath: () => "queue", createTask: async (request: { task: { httpRequest: { headers: Record<string, string> } } }) => { task = request; } };
-    await new CloudTasksWorkerWakeup(client, { projectId: "tele-auto-v2-prod", location: "asia-southeast2", queue: "q", targetUrl: "https://worker/internal/worker/drain", serviceAccountEmail: "runtime@example.com", workerAuthToken: "same-token" }).enqueue("bot:8");
+    await new CloudTasksWorkerWakeup(client, { projectId: "cluster-01-core-prod", location: "asia-southeast2", queue: "q", targetUrl: "https://worker/internal/worker/drain", serviceAccountEmail: "runtime@example.com", workerAuthToken: "same-token" }).enqueue("bot:8");
     let drains = 0;
     const config: AppConfig = { nodeEnv: "test", port: 8080, logLevel: "info", workerAuthToken: "same-token", workerMaxRuns: 4 };
     const logger: Logger = { debug() {}, info() {}, warn() {}, error() {} };
@@ -91,7 +91,7 @@ describe("M6 corrective contracts", () => {
 
   it("fails closed when active wakeup lacks worker token", () => {
     const client = { queuePath: () => "queue", createTask: async () => undefined };
-    expect(() => new CloudTasksWorkerWakeup(client, { projectId: "tele-auto-v2-prod", location: "asia-southeast2", queue: "q", targetUrl: "https://worker", serviceAccountEmail: "runtime@example.com", workerAuthToken: " " })).toThrow("worker auth token");
+    expect(() => new CloudTasksWorkerWakeup(client, { projectId: "cluster-01-core-prod", location: "asia-southeast2", queue: "q", targetUrl: "https://worker", serviceAccountEmail: "runtime@example.com", workerAuthToken: " " })).toThrow("worker auth token");
   });
 
   it("logs safe Telegram update shape when a message lacks actor identity", async () => {

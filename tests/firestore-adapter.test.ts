@@ -80,11 +80,11 @@ function makePlan(overrides: Partial<MutationPlan> = {}): MutationPlan {
 }
 function seed(decision: BusinessPlanResult = { status: "READY", plan: makePlan() }): BlockRunSeed { return { blockIndex: 0, store: "PMS", domain: "PRODUCTION", decision, now: fakeNow }; }
 function input(updateId: number) { return { botId: "tele-auto-v2", updateId, chatId: "chat", userId: "user", receivedAt: fakeNow }; }
-function repo(fake: FakeFirestore) { return new FirestoreDurableStateRepository({ firestore: fake as unknown as import("@google-cloud/firestore").Firestore, projectId: "tele-auto-v2-prod", databaseId: "(default)" }); }
+function repo(fake: FakeFirestore) { return new FirestoreDurableStateRepository({ firestore: fake as unknown as import("@google-cloud/firestore").Firestore, projectId: "cluster-01-core-prod", databaseId: "(default)" }); }
 
 describe("FirestoreDurableStateRepository", () => {
   it("requires the dedicated project and approved database", () => {
-    expect(() => new FirestoreDurableStateRepository({ firestore: new FakeFirestore() as unknown as import("@google-cloud/firestore").Firestore, projectId: "legacy-project" })).toThrow("tele-auto-v2-prod");
+    expect(() => new FirestoreDurableStateRepository({ firestore: new FakeFirestore() as unknown as import("@google-cloud/firestore").Firestore, projectId: "legacy-project" })).toThrow("cluster-01-core-prod");
     expect(() => new FirestoreDurableStateRepository({ firestore: new FakeFirestore() as unknown as import("@google-cloud/firestore").Firestore, databaseId: "legacy-db" })).toThrow("(default)");
   });
 
