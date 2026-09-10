@@ -22,7 +22,7 @@ export function createHttpHandler(config: AppConfig, logger: Logger, dependencie
       try { payload = await readJson(request); await dependencies.ingestion.accept(validateTelegramUpdate(payload)); response.statusCode = 200; response.end(JSON.stringify({ status: "accepted" })); }
       catch (error) {
         const status = error instanceof WebhookAuthError ? 403 : error instanceof Error && error.name === "WebhookInputError" ? 400 : 503;
-        logger.warn("Telegram webhook rejected", { ...summarizeTelegramUpdate(payload), rejection: status === 503 ? "RETRYABLE_FAILURE" : error instanceof Error ? error.name : "UNKNOWN_ERROR" });
+        logger.warn("Telegram webhook rejected", { ...summarizeTelegramUpdate(payload), rejection: status === 503 ? "RETRYABLE_FAILURE" : error instanceof Error ? error.name : "UNKNOWN_ERROR", errorMessage: error instanceof Error ? error.message : String(error) });
         response.statusCode = status; response.end(JSON.stringify({ status: status === 503 ? "retryable_failure" : "rejected" }));
       }
       return;
